@@ -1,0 +1,39 @@
+FIX V15 - PT_EQ desde base de datos
+
+Tu base ya tiene MOT_EQUIPO.PT_EQ. No cambies la base.
+
+El problema está en que el backend /equipos debe devolver PT_EQ y la info técnica.
+
+1) Abre Api_scv_ptbg.py.
+2) Reemplaza los endpoints existentes:
+   - /equipos
+   - /equipos/{qr_code}
+   - /equipo-info/{localizacion}
+   - /debug-pt-eq
+   con el contenido de backend/REEMPLAZAR_ENDPOINTS_PT_EQ_MOT_INFO.py.
+
+3) En ese archivo, si tu función de conexión no se llama get_db(), cambia get_db() por tu nombre real.
+   Ejemplos: get_connection(), get_db_connection(), conectar_db(), etc.
+
+4) Reinicia el backend:
+   uvicorn Api_scv_ptbg:app --host 0.0.0.0 --port 8001
+
+5) Prueba en navegador:
+   http://IP_DEL_SERVIDOR:8001/debug-pt-eq
+
+Debe verse PT_EQ con valores 1..9.
+
+6) Prueba:
+   http://IP_DEL_SERVIDOR:8001/equipos
+
+Cada equipo debe incluir:
+   PT_EQ
+   MARCA_INFO
+   SERIAL_INFO
+   MODEL_INFO
+   HP_INFO
+   VOLTS_INFO
+   RPM_INFO
+
+7) En la tablet, borra datos de la app o desinstala/reinstala para eliminar el catálogo viejo offline.
+   Luego entra y pulsa Refrescar.

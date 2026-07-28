@@ -1,0 +1,38 @@
+V30 - Ajuste oficial MOT_EQUIPO / MOT_DATA / mediciones con TAGNAME
+
+Cambios incluidos:
+
+1) Backend Api_scv_ptbg.py
+- Base oficial: PTBG_DAT.
+- Tabla de equipos: MOT_EQUIPO.
+- Tabla de datos técnicos: MOT_DATA.
+- Tabla de sistemas: MOT_SYSTEM.
+- Tabla de mediciones: MOT_VIBR_MUES.
+- Ya no usa Pruebas ni MOT_INFO.
+- El campo PUNTOS se respeta aunque sea 0.
+- Los QR numéricos buscan contra MOT_EQUIPO.LOCALIZACION.
+- /ultimas-mediciones ahora devuelve la última medición por cada LOCALIZACION, no solo las últimas 50 filas globales.
+- /ultima-medicion/{localizacion}, /historial/{localizacion} y /ultimas-mediciones devuelven también:
+  EQUIPO, TAGNAME, PUNTOS, NAME_SYS_1, NAME_SYS_2, MARCA, MODELO, SERIAL, VOLTAJE, CORRIENTE, RPM, HP.
+
+2) Flutter
+- db_helper.dart agrega getEquipoByLocalizacion().
+- mediciones_screen.dart muestra el nombre del equipo y TAGNAME en registros locales y de MariaDB.
+- sync_screen.dart muestra el nombre del equipo y TAGNAME en las mediciones pendientes.
+
+Explicación del problema anterior:
+El endpoint /ultimas-mediciones hacía ORDER BY ID DESC LIMIT 50. Eso traía las últimas 50 muestras globales, no una lectura por cada equipo. Si las últimas mediciones estaban concentradas en los equipos finales, parecía que la app descargaba desde la 47 en adelante. Ahora se usa MAX(ID) agrupado por LOCALIZACION.
+
+Pruebas recomendadas:
+http://IP_SERVIDOR:8001/estado
+http://IP_SERVIDOR:8001/equipos
+http://IP_SERVIDOR:8001/debug-qr/7
+http://IP_SERVIDOR:8001/equipos/7
+http://IP_SERVIDOR:8001/ultima-medicion/7
+http://IP_SERVIDOR:8001/ultimas-mediciones
+
+Luego en la tablet:
+1. Borrar datos de la app o reinstalar.
+2. Entrar.
+3. Descargar equipos y lecturas.
+4. Revisar Mediciones.

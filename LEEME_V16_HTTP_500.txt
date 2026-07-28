@@ -1,0 +1,24 @@
+V16 - Corrección HTTP 500 al descargar equipos
+
+El error HTTP 500 ocurre en el backend, no en Flutter.
+La app llama /equipos y el servidor falla consultando la base de datos.
+
+Pasos:
+1) Abre Api_scv_ptbg.py.
+2) Busca y elimina/comenta los endpoints viejos:
+   - @app.get('/equipos')
+   - @app.get('/equipos/{qr_code}')
+   - @app.get('/equipo-info/{localizacion}')
+   - @app.get('/debug-pt-eq')
+3) Copia el contenido de backend/REEMPLAZAR_ENDPOINTS_EQUIPOS_V16.py dentro de Api_scv_ptbg.py.
+4) Verifica que tu API tenga una función de conexión compatible, por ejemplo get_db().
+   Si no la tiene, configura estas variables de entorno o adapta _open_scv_connection():
+   SCV_DB_HOST, SCV_DB_PORT, SCV_DB_USER, SCV_DB_PASSWORD, SCV_DB_NAME.
+5) Reinicia el backend:
+   uvicorn Api_scv_ptbg:app --host 0.0.0.0 --port 8001
+6) Prueba en navegador:
+   http://IP_DEL_SERVIDOR:8001/debug-pt-eq
+   http://IP_DEL_SERVIDOR:8001/equipos
+
+La respuesta de /equipos debe traer PT_EQ y los campos de MOT_INFO.
+Cuando la app toque Descargar equipos y lecturas, borrará el catálogo local viejo y guardará el nuevo.

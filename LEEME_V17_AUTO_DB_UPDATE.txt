@@ -1,0 +1,36 @@
+SCV-PTBG V17 - ACTUALIZACIÓN AUTOMÁTICA DESDE BASE DE DATOS
+
+CAMBIO PRINCIPAL
+- La app toma el tipo visual desde MOT_EQUIPO.PT_EQ.
+- Si cambias PT_EQ, marca, modelo, serial o datos de placa en MariaDB, la app los verá al tocar Refrescar / Descargar equipos y lecturas.
+- No hace falta modificar la base de datos si PT_EQ ya existe y tiene valores 1..9.
+
+FLUTTER
+1) Copia todo este proyecto.
+2) Ejecuta:
+   flutter clean
+   flutter pub get
+   flutter run
+3) En la tablet, toca Refrescar o Descargar equipos y lecturas.
+4) Si quedó cache viejo, borra datos de la app o desinstala/reinstala una vez.
+
+BACKEND
+Dentro de backend/ está el archivo:
+  REEMPLAZAR_ENDPOINTS_EQUIPOS_V17_ROBUSTO.py
+
+Debes pegar ese bloque en Api_scv_ptbg.py reemplazando los endpoints viejos:
+  /equipos
+  /equipos/{qr_code}
+  /equipo-info/{localizacion}
+  /debug-pt-eq
+
+Luego reinicia el backend:
+  uvicorn Api_scv_ptbg:app --host 0.0.0.0 --port 8001
+
+PRUEBAS
+En navegador:
+  http://IP_DEL_SERVIDOR:8001/debug-pt-eq
+  http://IP_DEL_SERVIDOR:8001/equipos
+  http://IP_DEL_SERVIDOR:8001/debug-equipos-completo
+
+/equipos debe devolver PT_EQ en cada equipo. Si no lo devuelve, Flutter no puede mostrar la imagen correcta.

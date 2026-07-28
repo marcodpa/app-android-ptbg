@@ -1,0 +1,24 @@
+SELECT
+    ID_EQ,
+    EQUIPO,
+    LC_EQ,
+    PT_EQ,
+    TG_EQ
+FROM MOT_EQUIPO
+ORDER BY ID_EQ;
+
+SELECT
+    e.ID_EQ,
+    e.EQUIPO,
+    e.LC_EQ,
+    e.PT_EQ,
+    e.TG_EQ,
+    i.MARCA_INFO,
+    i.SERIAL_INFO,
+    i.MODEL_INFO,
+    i.HP_INFO,
+    i.VOLTS_INFO,
+    i.RPM_INFO
+FROM MOT_EQUIPO e
+LEFT JOIN MOT_INFO i ON i.LC_EQ = e.LC_EQ
+ORDER BY e.ID_EQ;

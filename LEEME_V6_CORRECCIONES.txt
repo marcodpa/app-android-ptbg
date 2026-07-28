@@ -1,0 +1,31 @@
+SCV-PTBG - V6 correcciones
+
+Cambios incluidos:
+
+1) Las imagenes de puntos del PDF ahora estan declaradas en pubspec.yaml:
+   - assets/images/point_refs/
+
+2) En la pantalla de medicion se usan las imagenes del PDF que ya traen el punto exacto.
+   La app dibuja solamente la linea guia segun el eje:
+   - H: Horizontal, linea negra
+   - V: Vertical, linea gris
+   - A: Axial, linea roja/diagonal
+
+3) Al entrar a iniciar medicion ya NO se abre el teclado automaticamente.
+   El teclado solo aparece cuando el operador toca el campo de lectura.
+
+4) En el preview del QR se muestra la imagen limpia del equipo, sin puntos.
+
+Archivos modificados:
+- pubspec.yaml
+- lib/screens/capture_screen.dart
+- lib/screens/qr_screen.dart
+- lib/widgets/equipo_punto_viewer.dart
+- lib/models/equipo_visual_config.dart
+- assets/images/point_refs/*.jpg
+- assets/images/visual_*.jpg
+
+Despues de copiar ejecutar:
+flutter clean
+flutter pub get
+flutter run

@@ -1,0 +1,40 @@
+SCV-PTBG V18 — Información técnica grande + ejes 3D
+
+Cambios:
+1) La franja de información técnica ahora muestra valores completos y más grandes:
+   - Serial
+   - Modelo
+   - Marca
+   - LC
+   - QR
+   - HP
+   - Voltaje
+   - FLA
+   - SF
+   - Hz
+   - Fases
+   - RPM
+   - Arranque
+
+2) La información técnica se mantiene en lectura horizontal para evitar truncar seriales/modelos largos.
+   Si un valor es largo, se puede desplazar horizontalmente en esa franja.
+
+3) Las líneas de medición ahora siguen el criterio de plano 3D:
+   - Z = Horizontal = H
+   - X = Axial = A
+   - Y = Vertical = V
+
+4) El widget dibuja flechas en las líneas para indicar dirección del eje.
+
+Archivos modificados:
+- lib/screens/capture_screen.dart
+- lib/widgets/equipo_punto_viewer.dart
+- backend/Api_scv_ptbg.py
+
+Instalación:
+1) Copiar los archivos del parche en el proyecto.
+2) Reiniciar el backend si reemplazas Api_scv_ptbg.py.
+3) Ejecutar:
+   flutter clean
+   flutter pub get
+   flutter run

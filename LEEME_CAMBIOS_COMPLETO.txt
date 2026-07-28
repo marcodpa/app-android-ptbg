@@ -1,0 +1,20 @@
+SCV-PTBG - Paquete completo integrado
+
+Incluye:
+1. Home de rescate para evitar pantalla en blanco.
+2. QR screen corregido con fondo gris y botón Activar cámara.
+3. Pantalla de medición mejorada con imagen grande del equipo, marco, punto de medición y orientación H/V/A.
+4. Imágenes visuales de equipos en assets/images.
+5. Nuevos archivos:
+   - lib/models/equipo_visual_config.dart
+   - lib/widgets/equipo_punto_viewer.dart
+
+Instalación:
+1. Copia esta carpeta scv_ptbg como tu proyecto de Flutter.
+2. Ejecuta:
+   flutter clean
+   flutter pub get
+   flutter run
+
+Nota:
+No se pudo ejecutar flutter analyze en este entorno porque Flutter no está instalado aquí.

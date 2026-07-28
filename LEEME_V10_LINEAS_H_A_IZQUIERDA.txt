@@ -1,0 +1,8 @@
+V10 - Lineas H y A a la izquierda
+
+Incluye V8 + capture_screen V9 + widget V10.
+
+Cambios del widget:
+- Horizontal y axial siempre salen hacia la izquierda.
+- El cuadro de la medicion anterior queda a la izquierda.
+- Vertical se mantiene vertical.

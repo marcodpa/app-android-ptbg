@@ -1,0 +1,11 @@
+PATCH V25 - Info en imagen y leyenda clicable
+
+Reemplazar:
+- lib/screens/capture_screen.dart
+- lib/widgets/equipo_punto_viewer.dart
+
+Cambios:
+- Dentro del panel de imagen, arriba a la izquierda se muestra Modelo, Serial y Marca.
+- La leyenda de colores sigue simple: Horizontal / Vertical / Axial.
+- Al tocar la leyenda se abre la lista completa de datos técnicos del equipo.
+- Se mantiene el botón de información del header.

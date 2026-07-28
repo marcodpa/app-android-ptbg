@@ -1,0 +1,13 @@
+SCV PTBG - VERSION MEDICION VISUAL V4
+
+Incluye:
+- Pantalla de medicion rediseñada sin scroll.
+- Imagen del equipo mas pequeña y enmarcada.
+- Datos principales mas comodos para el operador.
+- Medicion anterior visible en grande.
+- Configuracion visual por LOCALIZACION del equipo.
+
+Ejecutar:
+flutter clean
+flutter pub get
+flutter run

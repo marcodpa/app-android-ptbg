@@ -1,0 +1,18 @@
+PATCH V24 - Detalles del equipo en botón
+
+Reemplazar estos archivos en tu proyecto:
+
+lib/screens/capture_screen.dart
+lib/widgets/equipo_punto_viewer.dart
+
+Cambios:
+- Los datos técnicos del equipo ya no ocupan espacio en la pantalla principal.
+- Los detalles están dentro del botón de información (ícono i) ubicado arriba.
+- Al tocar el botón se abre una hoja con Equipo, Sistema, LC, QR, PT_EQ, Marca, Modelo, Serial, HP, Voltaje, FLA, SF, Hz, Fases, RPM y Arranque.
+- La pantalla principal queda compacta para que todo entre mejor.
+- Se mantiene la leyenda simple y las líneas: Horizontal diagonal, Axial horizontal, Vertical vertical.
+
+Luego ejecutar:
+flutter clean
+flutter pub get
+flutter run

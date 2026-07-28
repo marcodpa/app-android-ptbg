@@ -1,0 +1,31 @@
+V32 - Última medición por LOCALIZACION sin duplicados
+
+Objetivo:
+- La pantalla Mediciones > En MariaDB debe mostrar solo UNA medición por LOCALIZACION.
+- La lectura mostrada debe ser la de mayor ID para cada LOCALIZACION.
+- Cada medición debe mostrar EQUIPO y TAGNAME tomados desde MOT_EQUIPO.
+- Se evita que MOT_DATA duplique registros cuando hay más de una fila por UBICACION.
+
+Archivos modificados:
+- backend/Api_scv_ptbg.py
+- lib/screens/mediciones_screen.dart
+- lib/services/api_service.dart
+- CONSULTAS_VALIDACION_V32.sql
+
+Pruebas del backend:
+http://IP_SERVIDOR:8001/debug-ultimas-mediciones
+http://IP_SERVIDOR:8001/ultimas-mediciones
+http://IP_SERVIDOR:8001/ultima-medicion/7
+
+Después de reemplazar Api_scv_ptbg.py reiniciar el backend:
+python Api_scv_ptbg.py
+
+Después de reemplazar Flutter:
+flutter clean
+flutter pub get
+flutter run
+
+Nota:
+Si una LOCALIZACION tiene una medición vieja en ID 1-50 y otra nueva después de ID 50,
+el sistema mostrará la nueva porque esa es la última por LOCALIZACION.
+Si una LOCALIZACION solo tiene medición en ID 1-50 y ninguna posterior, también debe aparecer.

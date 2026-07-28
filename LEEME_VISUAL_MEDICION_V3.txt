@@ -1,0 +1,22 @@
+AJUSTE VISUAL MEDICION V3
+
+Cambios principales:
+- capture_screen.dart reemplazado por una pantalla sin scroll para tablet.
+- El nombre del equipo aparece una sola vez, en el encabezado.
+- La imagen del equipo aparece grande, con marco, punto actual y línea de orientación.
+- Horizontal = negro, Vertical = gris/blanco, Axial = rojo.
+- La bomba JOCKEY usa la misma lógica visual de SPRINT.
+- Se agregan imágenes limpias y también imágenes de referencia con puntos para futura calibración.
+- No tocar theme.dart: ya queda con minimumSize Size(0, 52), para evitar RenderBox infinito.
+
+Archivos clave:
+lib/screens/capture_screen.dart
+lib/widgets/equipo_punto_viewer.dart
+lib/models/equipo_visual_config.dart
+assets/images/visual_*.jpg
+assets/images/ref_*_puntos.jpg
+
+Después de copiar:
+flutter clean
+flutter pub get
+flutter run

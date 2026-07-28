@@ -1,0 +1,41 @@
+SCV-PTBG V28 - BASE OFICIAL PTBG_DAT
+
+Cambios principales:
+
+1. La app/backend ya NO usan la base Pruebas.
+   DB_NAME = PTBG_DAT
+
+2. La tabla de información técnica ya NO es MOT_INFO.
+   Ahora se lee desde PTBG_DAT.MOT_DATA.
+
+3. La tabla de equipos oficial es MOT_EQUIP.
+   Campos usados:
+   - ID
+   - CODE_SYS
+   - EQUIPO
+   - LOCALIZACION
+   - NAME_SYS_1
+   - NAME_SYS_2
+   - CODE_QR
+   - PUNTOS  -> tipo visual de imagen/puntos del 1 al 9
+   - TAGNAME
+
+4. La tabla de datos técnicos oficial es MOT_DATA.
+   Se cruza así:
+   MOT_DATA.UBICACION = MOT_EQUIP.LOCALIZACION
+
+5. El QR numérico funciona con LOCALIZACION.
+   Ejemplo:
+   QR = 31 -> busca MOT_EQUIP.LOCALIZACION = 31
+
+6. La imagen visual se decide por MOT_EQUIP.PUNTOS, no por nombre del equipo.
+
+Pruebas en navegador:
+
+http://IP_SERVIDOR:8001/estado
+http://IP_SERVIDOR:8001/equipos
+http://IP_SERVIDOR:8001/debug-puntos
+http://IP_SERVIDOR:8001/debug-qr/1
+http://IP_SERVIDOR:8001/equipos/1
+
+Después de instalar en la tablet, borrar datos de la app o reinstalar si tenía catálogo viejo offline.

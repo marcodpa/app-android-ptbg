@@ -1,0 +1,25 @@
+V5 - Puntos exactos desde PDF
+
+Archivos principales:
+- lib/models/equipo_visual_config.dart
+- lib/widgets/equipo_punto_viewer.dart
+- lib/screens/capture_screen.dart
+- assets/images/point_refs/*.jpg
+
+Cambios:
+1) Las imagenes de medicion salen del PDF de referencia cargado por Juan.
+2) Cada punto usa su propia imagen con el punto exacto marcado.
+3) La linea de orientacion sale desde ese punto:
+   - H = negra horizontal
+   - V = gris vertical
+   - A = roja axial/diagonal
+4) La cantidad de puntos se toma de la configuracion visual, no de la base de datos.
+5) La medicion anterior se muestra en la etiqueta y en el panel de captura.
+6) El layout sigue sin scroll, diseñado para tablet.
+
+Instalacion:
+- Copiar el contenido de este ZIP sobre el proyecto.
+- Ejecutar:
+  flutter clean
+  flutter pub get
+  flutter run

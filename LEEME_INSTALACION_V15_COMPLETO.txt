@@ -1,0 +1,26 @@
+SCV-PTBG V15 COMPLETO - PT_EQ DESDE BASE DE DATOS
+
+Contenido:
+- lib/ completo actualizado.
+- assets/images/point_refs/ con imágenes del PDF por punto.
+- backend/REEMPLAZAR_ENDPOINTS_PT_EQ_MOT_INFO.py para que la API devuelva PT_EQ y MOT_INFO.
+- PRUEBA_SQL_PT_EQ.sql para verificar la columna PT_EQ en MOT_EQUIPO.
+
+Instalación Flutter:
+1) Copiar/pegar las carpetas lib, assets y pubspec.yaml sobre el proyecto Flutter.
+2) Ejecutar:
+   flutter clean
+   flutter pub get
+   flutter run
+
+Backend:
+1) En Api_scv_ptbg.py reemplazar los endpoints /equipos, /equipos/{qr_code}, /equipo-info/{localizacion}
+   usando el contenido de backend/REEMPLAZAR_ENDPOINTS_PT_EQ_MOT_INFO.py.
+2) Reiniciar el backend.
+3) Probar en navegador:
+   http://IP_DEL_SERVIDOR:8001/debug-pt-eq
+   http://IP_DEL_SERVIDOR:8001/equipos
+
+Regla importante:
+La imagen visual del equipo se decide usando MOT_EQUIPO.PT_EQ enviado por la API.
+Si la tablet ya tiene catálogo viejo, borrar datos de la app o desinstalar/reinstalar, luego tocar Refrescar.

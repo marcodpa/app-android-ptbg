@@ -1,0 +1,13 @@
+SCV-PTBG V20 — QR numérico por LC_EQ
+
+Cambios principales:
+1. Los QR impresos pueden contener solo el número LC_EQ: 1, 2, 3...
+2. Si la app recibe PTBG-004, convierte y prueba primero /equipos/4.
+3. Si CD_QR/TG_EQ no existe, QR_CODE se normaliza a LC_EQ, no a PTBG-004.
+4. Backend conserva conexión original y acepta CD_QR, TG_EQ, LC_EQ e ID_EQ.
+
+Pruebas backend:
+http://IP:8001/debug-qr/4
+http://IP:8001/equipos/4
+http://IP:8001/debug-qr/PTBG-004
+http://IP:8001/equipos/PTBG-004

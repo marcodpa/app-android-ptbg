@@ -1,0 +1,22 @@
+V8 - Medicion visual + datos MOT_INFO + layout de teclado
+
+Archivos modificados:
+- lib/screens/capture_screen.dart
+- lib/models/models.dart
+- lib/services/api_service.dart
+- lib/db/db_helper.dart
+
+Cambios:
+1) El panel de la imagen ya NO se reduce al abrir el teclado.
+2) Los botones son mas compactos y limpios.
+3) El panel de lectura queda mas comodo para tablet.
+4) Se agrega una banda de informacion tecnica: LC, QR, Marca, Modelo, Serial, HP, Voltaje, RPM.
+5) La app busca la info en SQLite primero y luego en el API /equipo-info/{localizacion}.
+6) Se agrega soporte local para tabla EQUIPO_INFO.
+
+Backend:
+- Copia el contenido de backend/AGREGAR_A_Api_scv_ptbg.py dentro de tu Api_scv_ptbg.py.
+- Si tu funcion de conexion tiene otro nombre, cambia get_db_connection().
+
+Nota:
+La relacion usada es MOT_EQUIPO.LC_EQ = MOT_INFO.LC_EQ.

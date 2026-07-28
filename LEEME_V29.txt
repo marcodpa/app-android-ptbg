@@ -1,0 +1,25 @@
+V29 - PUNTOS=0 NO BLOQUEA
+
+Problema:
+Algunos equipos tienen MOT_EQUIPO.PUNTOS = 0.
+El backend/app no debe bloquear esos equipos ni convertir 0 en 4.
+
+Cambio principal:
+- PUNTOS null -> 0
+- PUNTOS 0 -> se devuelve 0
+- PUNTOS 1..9 -> se devuelve el valor real
+
+Reemplazar:
+backend/Api_scv_ptbg.py
+
+Pruebas:
+http://IP_SERVIDOR:8001/estado
+http://IP_SERVIDOR:8001/equipos
+http://IP_SERVIDOR:8001/debug-puntos
+http://IP_SERVIDOR:8001/equipos/1
+
+En Flutter, si todavía no carga equipos con PUNTOS=0, revisar que el modelo NO haga esto:
+  puntos: json['PUNTOS'] ?? 4
+ni esto:
+  puntos: value == 0 ? 4 : value
+Debe preservar 0.

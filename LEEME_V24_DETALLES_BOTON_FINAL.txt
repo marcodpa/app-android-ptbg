@@ -1,0 +1,14 @@
+SCV-PTBG COMPLETO V24
+
+Esta versión deja los detalles técnicos del equipo dentro de un botón de información.
+
+Flujo:
+- Pantalla principal de medición queda limpia.
+- Arriba se muestra un botón con ícono de información.
+- Al tocarlo se muestran todos los datos técnicos descargados desde la base de datos.
+- Se mantienen las correcciones de QR numérico por LC_EQ, PT_EQ para imágenes y leyenda simple.
+
+Comandos:
+flutter clean
+flutter pub get
+flutter run

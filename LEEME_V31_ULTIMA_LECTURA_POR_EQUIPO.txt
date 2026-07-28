@@ -1,0 +1,54 @@
+SCV-PTBG V31 — Última lectura por equipo + nombre/tag
+
+Estructura oficial:
+- Base: PTBG_DAT
+- Equipos: MOT_EQUIPO
+- Datos técnicos: MOT_DATA
+- Sistemas: MOT_SYSTEM
+- Mediciones: MOT_VIBR_MUES
+
+Cambios principales:
+1) /ultimas-mediciones ya NO descarga las últimas filas globales por ID.
+   Ahora descarga SOLO la última lectura de cada equipo/localización.
+
+2) La localización se resuelve contra MOT_EQUIPO:
+   MOT_VIBR_MUES.LOCALIZACION = MOT_EQUIPO.LOCALIZACION
+
+3) Cada medición descargada trae:
+   - LOCALIZACION
+   - EQUIPO
+   - TAGNAME
+   - NAME_SYS_1
+   - NAME_SYS_2
+   - última lectura H/V/A/RMS
+
+4) La pantalla de mediciones usa el equipo local para mostrar:
+   LOC-## · NOMBRE DEL EQUIPO
+   TAG: TAGNAME · FECHA HORA
+
+5) La descarga offline usa /ultimas-mediciones en una sola llamada.
+   Si falla, usa respaldo equipo por equipo con /ultima-medicion/{localizacion}.
+
+Pruebas de backend:
+http://IP_SERVIDOR:8001/equipos
+http://IP_SERVIDOR:8001/ultimas-mediciones
+http://IP_SERVIDOR:8001/ultima-medicion/7
+
+Consulta SQL equivalente:
+SELECT
+  e.LOCALIZACION,
+  e.EQUIPO,
+  e.TAGNAME,
+  m.ID,
+  m.FECHA,
+  m.HORA,
+  m.H1, m.V1, m.A1,
+  m.RMS
+FROM MOT_EQUIPO e
+INNER JOIN (
+  SELECT LOCALIZACION, MAX(ID) AS MAX_ID
+  FROM MOT_VIBR_MUES
+  GROUP BY LOCALIZACION
+) last_m ON last_m.LOCALIZACION = e.LOCALIZACION
+INNER JOIN MOT_VIBR_MUES m ON m.ID = last_m.MAX_ID
+ORDER BY e.LOCALIZACION;

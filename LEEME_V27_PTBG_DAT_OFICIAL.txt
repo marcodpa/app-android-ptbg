@@ -1,0 +1,47 @@
+SCV-PTBG V27 — Estructura oficial PTBG_DAT
+
+Cambios principales:
+
+1) Backend apunta a la base oficial:
+   DB_NAME = "PTBG_DAT"
+
+2) Tablas oficiales usadas:
+   - MOT_EQUIP   : catálogo de equipos
+   - MOT_DATA    : datos técnicos / placa del equipo
+   - MOT_SYSTEM  : sistemas
+   - MOT_VIBR_MUES: mediciones, sin cambios
+
+3) Mapeo usado por la app:
+   MOT_EQUIP.LOCALIZACION -> número del equipo y QR numérico
+   MOT_EQUIP.PUNTOS       -> tipo visual de imagen/puntos 1..9
+   MOT_EQUIP.TAGNAME      -> tagname del equipo
+   MOT_EQUIP.CODE_QR      -> QR si luego se decide grabarlo allí
+
+4) Datos técnicos:
+   MOT_DATA.UBICACION = MOT_EQUIP.LOCALIZACION
+
+5) QR:
+   Los QR generados del 1 al 50 contienen solo el número de LOCALIZACION.
+   Ejemplo:
+      QR = 31
+      Busca MOT_EQUIP.LOCALIZACION = 31
+
+6) Endpoints importantes:
+   /estado
+   /equipos
+   /equipos/{qr}
+   /debug-qr/{qr}
+   /debug-pt-eq
+   /equipo-info/{localizacion}
+
+7) Prueba rápida:
+   http://IP_SERVIDOR:8001/estado
+   http://IP_SERVIDOR:8001/equipos
+   http://IP_SERVIDOR:8001/debug-qr/1
+   http://IP_SERVIDOR:8001/equipos/1
+
+8) En la tablet:
+   - borrar datos de la app o reinstalar una vez si tenía catálogo viejo
+   - abrir la app
+   - tocar Refrescar / Descargar equipos y lecturas
+

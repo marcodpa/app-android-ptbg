@@ -1,0 +1,80 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Datos operativos y archivos locales (no publicar)
+.env
+.env.local
+*.db
+*.sqlite
+*.sqlite3
+FlutterSharedPreferences.xml
+printer_settings.json
+processed_print_requests.json
+print_request.lock
+usb_status*.json
+usb_sync_request*.json
+usb_print_request*.json
+tablet_*.png
+window*.xml
+tmp_tablet_check/
+tmp_usb_sync_manual/
+__pycache__/
+
+# Logs y salidas locales de compilacion
+*.log
+*.out.log
+*.err.log
+
+# El APK final se versiona expresamente mediante Git LFS.
+!/build/
+/build/*
+!/build/app/
+/build/app/*
+!/build/app/outputs/
+/build/app/outputs/*
+!/build/app/outputs/flutter-apk/
+/build/app/outputs/flutter-apk/*
+!/build/app/outputs/flutter-apk/app-debug.apk
