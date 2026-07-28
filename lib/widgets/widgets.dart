@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
 
+export 'alignment_reference_card.dart';
+
 // ── Header industrial (con fondo de refinería) ──────────────────────────
 class AppHeader extends StatelessWidget implements PreferredSizeWidget {
   final String? title;
