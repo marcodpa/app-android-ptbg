@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import '../db/db_helper.dart';
 import '../models/models.dart';
 import '../theme.dart';
+import '../widgets/widgets.dart';
 
 typedef AlignmentSaveCallback = Future<void> Function(
   AlignmentMeasurement measurement,
@@ -167,14 +168,11 @@ class _AlignmentCaptureScreenState extends State<AlignmentCaptureScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.headerTop,
-        foregroundColor: Colors.white,
-        title: Text(
-          widget.measurementToEdit == null
-              ? 'Medición de alineación'
-              : 'Revisar alineación',
-        ),
+      appBar: AppHeader(
+        title: widget.measurementToEdit == null
+            ? 'Medición de alineación'
+            : 'Revisar alineación',
+        subtitle: 'Ejes y acoples',
       ),
       body: SafeArea(
         child: Form(
@@ -185,7 +183,9 @@ class _AlignmentCaptureScreenState extends State<AlignmentCaptureScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _EquipmentHeader(equipo: widget.equipo),
-                const SizedBox(height: 14),
+                const SizedBox(height: 16),
+                AlignmentReferenceCard(puntos: widget.equipo.puntos),
+                const SizedBox(height: 16),
                 for (final section in _sections) ...[
                   _AlignmentCard(
                     section: section,
@@ -233,23 +233,95 @@ class _EquipmentHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              equipo.equipo,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.headerTop, AppColors.headerBottom],
+        ),
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: AppColors.shadowMd,
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: .12),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white.withValues(alpha: .18)),
+            ),
+            child: const Icon(
+              Icons.precision_manufacturing_rounded,
+              color: AppColors.teal,
+              size: 26,
+            ),
+          ),
+          const SizedBox(width: 13),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  equipo.equipo,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
                     fontWeight: FontWeight.w900,
                   ),
+                ),
+                const SizedBox(height: 5),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 5,
+                  children: [
+                    _EquipmentMeta(
+                      icon: Icons.account_tree_outlined,
+                      label: equipo.sistema,
+                    ),
+                    _EquipmentMeta(
+                      icon: Icons.location_on_outlined,
+                      label: 'Localización ${equipo.localizacion}',
+                    ),
+                  ],
+                ),
+              ],
             ),
-            const SizedBox(height: 4),
-            Text('${equipo.sistema} · Localización ${equipo.localizacion}'),
-          ],
-        ),
+          ),
+        ],
       ),
+    );
+  }
+}
+
+class _EquipmentMeta extends StatelessWidget {
+  const _EquipmentMeta({
+    required this.icon,
+    required this.label,
+  });
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: Colors.white70, size: 13),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white70,
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -280,17 +352,96 @@ class _AlignmentCard extends StatelessWidget {
                     color: AppColors.headerTop,
                   ),
             ),
-            const SizedBox(height: 14),
-            for (var index = 0; index < section.fields.length; index++) ...[
-              _AlignmentFieldInput(
-                field: section.fields[index],
-                controller: controllers[section.fields[index].column]!,
-                validator: validator,
+            const SizedBox(height: 4),
+            const Text(
+              'Registre los valores verticales y horizontales del acople',
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 12,
               ),
-              if (index < section.fields.length - 1) const SizedBox(height: 12),
-            ],
+            ),
+            const SizedBox(height: 16),
+            _AlignmentMetricGroup(
+              title: 'Ángulo',
+              icon: Icons.rotate_90_degrees_ccw_rounded,
+              fields: section.fields.take(2).toList(),
+              controllers: controllers,
+              validator: validator,
+            ),
+            const SizedBox(height: 14),
+            _AlignmentMetricGroup(
+              title: 'Compensación',
+              icon: Icons.open_with_rounded,
+              fields: section.fields.skip(2).toList(),
+              controllers: controllers,
+              validator: validator,
+            ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _AlignmentMetricGroup extends StatelessWidget {
+  const _AlignmentMetricGroup({
+    required this.title,
+    required this.icon,
+    required this.fields,
+    required this.controllers,
+    required this.validator,
+  });
+
+  final String title;
+  final IconData icon;
+  final List<AlignmentField> fields;
+  final Map<String, TextEditingController> controllers;
+  final FormFieldValidator<String> validator;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface2,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: AppColors.tealLight,
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Icon(icon, color: AppColors.tealDark, size: 17),
+              ),
+              const SizedBox(width: 9),
+              Text(
+                title,
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          for (var index = 0; index < fields.length; index++) ...[
+            _AlignmentFieldInput(
+              field: fields[index],
+              controller: controllers[fields[index].column]!,
+              validator: validator,
+            ),
+            if (index < fields.length - 1) const SizedBox(height: 12),
+          ],
+        ],
       ),
     );
   }
@@ -320,6 +471,26 @@ class _AlignmentFieldInput extends StatelessWidget {
       ),
       decoration: InputDecoration(
         labelText: field.label,
+        hintText: '0,05',
+        helperText: 'Ejemplo: 0,05',
+        prefixIcon: Padding(
+          padding: const EdgeInsets.all(11),
+          child: Container(
+            alignment: Alignment.center,
+            width: 30,
+            decoration: BoxDecoration(
+              color: AppColors.tealLight,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              field.column.endsWith('_V') ? 'V' : 'H',
+              style: const TextStyle(
+                color: AppColors.tealDark,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        ),
         suffixText: field.unit,
       ),
     );

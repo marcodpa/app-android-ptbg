@@ -34,7 +34,7 @@ void main() {
     });
   });
 
-  testWidgets('MOTOR-BOMBA muestra una tarjeta y ninguna imagen', (
+  testWidgets('MOTOR-BOMBA muestra referencia y campos agrupados', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -47,9 +47,16 @@ void main() {
     );
 
     expect(find.text('ALINEACIÓN MOTOR–BOMBA'), findsOneWidget);
+    expect(
+      find.byKey(const Key('alignment-reference-motor-pump')),
+      findsOneWidget,
+    );
+    expect(find.text('Referencia de alineación correcta'), findsOneWidget);
+    expect(find.text('Ángulo'), findsOneWidget);
+    expect(find.text('Compensación'), findsOneWidget);
+    expect(find.text('Ejemplo: 0,05'), findsNWidgets(4));
     expect(find.text('Ángulo vertical'), findsOneWidget);
     expect(find.textContaining('anterior'), findsNothing);
-    expect(find.byType(Image), findsNothing);
   });
 
   testWidgets('PUNTOS 6 muestra las dos alineaciones completas', (
@@ -66,6 +73,14 @@ void main() {
 
     expect(find.text('ALINEACIÓN MOTOR–CAJA'), findsOneWidget);
     expect(find.text('ALINEACIÓN CAJA–BOMBA'), findsOneWidget);
+    expect(
+      find.byKey(const Key('alignment-reference-motor-gearbox-pump')),
+      findsOneWidget,
+    );
+    expect(find.text('Motor–Caja'), findsOneWidget);
+    expect(find.text('Caja–Bomba'), findsOneWidget);
+    expect(find.text('Ángulo'), findsNWidgets(2));
+    expect(find.text('Compensación'), findsNWidgets(2));
     expect(find.byType(TextFormField), findsNWidgets(9));
   });
 
