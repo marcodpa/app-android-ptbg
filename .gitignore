@@ -58,6 +58,8 @@ usb_status*.json
 usb_sync_request*.json
 usb_print_request*.json
 tablet_*.png
+tablet_*.mp4
+tablet_*_ui.xml
 window*.xml
 tmp_tablet_check/
 tmp_usb_sync_manual/
