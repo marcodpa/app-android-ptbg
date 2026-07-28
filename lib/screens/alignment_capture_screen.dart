@@ -166,6 +166,78 @@ class _AlignmentCaptureScreenState extends State<AlignmentCaptureScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_sections.isEmpty) {
+      return Scaffold(
+        backgroundColor: AppColors.bg,
+        appBar: const AppHeader(
+          title: 'Medición de alineación',
+          subtitle: 'Operación no disponible',
+        ),
+        body: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 440),
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppColors.border),
+                  boxShadow: AppColors.shadowMd,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 72,
+                      height: 72,
+                      decoration: const BoxDecoration(
+                        color: AppColors.warningBg,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.block_rounded,
+                        color: AppColors.warning,
+                        size: 34,
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    const Text(
+                      'Alineación no disponible para este equipo',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 19,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Esta operación solo aplica a equipos MOTOR–BOMBA '
+                      'y MOTOR–CAJA–BOMBA.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 13,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                    ElevatedButton.icon(
+                      onPressed: () => Navigator.maybePop(context),
+                      icon: const Icon(Icons.arrow_back_rounded),
+                      label: const Text('Volver'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppHeader(

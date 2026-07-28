@@ -26,6 +26,16 @@ const _motorGearboxPump = Equipo(
   sistema: 'BG-2',
 );
 
+const _finFan = Equipo(
+  id: 3,
+  codeSys: 1,
+  equipo: 'FIN-FAN',
+  localizacion: 30,
+  puntos: 4,
+  ptEq: 4,
+  sistema: 'ENFRIAMIENTO',
+);
+
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({
@@ -181,5 +191,26 @@ void main() {
     expect(source, isNot(contains('ApiService')));
     expect(source, isNot(contains('http')));
     expect(source, isNot(contains('MariaDB')));
+  });
+
+  testWidgets('bloquea captura directa para FIN-FAN', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: AlignmentCaptureScreen(equipo: _finFan),
+      ),
+    );
+
+    expect(
+      find.text('Alineación no disponible para este equipo'),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('alignment-save-button')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('alignment-reference-motor-pump')),
+      findsNothing,
+    );
   });
 }

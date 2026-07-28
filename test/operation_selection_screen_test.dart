@@ -59,6 +59,33 @@ void main() {
     expect(find.byKey(const Key('operation-alignment')), findsNothing);
   });
 
+  for (final caseData in const [
+    ('FIN-FAN', 4),
+    ('VENTILADORES', 5),
+  ]) {
+    testWidgets('${caseData.$1} no ofrece alineación', (tester) async {
+      final equipo = Equipo(
+        id: 40 + caseData.$2,
+        codeSys: 1,
+        equipo: caseData.$1,
+        localizacion: 40 + caseData.$2,
+        puntos: caseData.$2,
+        ptEq: caseData.$2,
+        sistema: 'ENFRIAMIENTO',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(home: OperationSelectionScreen(equipo: equipo)),
+      );
+
+      expect(find.text('Alineación'), findsNothing);
+      expect(
+        find.byKey(const Key('operation-alignment')),
+        findsNothing,
+      );
+    });
+  }
+
   testWidgets('abre temperatura con el mismo equipo seleccionado',
       (tester) async {
     OperationType? launched;
