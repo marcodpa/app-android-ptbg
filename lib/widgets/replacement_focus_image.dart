@@ -5,6 +5,8 @@ import '../models/operation_flow.dart';
 import '../models/replacement_visual_layout.dart';
 import '../theme.dart';
 
+import 'decode_imagen.dart';
+
 class ReplacementFocusImage extends StatelessWidget {
   const ReplacementFocusImage({
     super.key,
@@ -72,16 +74,12 @@ class ReplacementFocusImage extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 10),
-                const Expanded(
+                Expanded(
                   child: Text(
                     'Componentes del equipo',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w900,
-                    ),
+                    style: AppText.seccion.copyWith(color: Colors.white),
                   ),
                 ),
                 Container(
@@ -97,11 +95,7 @@ class ReplacementFocusImage extends StatelessWidget {
                   ),
                   child: Text(
                     selectionLabel,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w900,
-                    ),
+                    style: AppText.micro.copyWith(color: Colors.white),
                   ),
                 ),
               ],
@@ -165,12 +159,18 @@ class ReplacementFocusImage extends StatelessWidget {
   }
 
   Widget _assetImage(String asset, {Key? key}) {
-    return Image.asset(
-      asset,
-      key: key,
-      fit: BoxFit.fill,
-      semanticLabel: 'Componentes del equipo ${equipo.equipo}',
-      errorBuilder: (_, __, ___) => _fallback(compact: true),
+    return Builder(
+      builder: (context) => Image.asset(
+        asset,
+        key: key,
+        fit: BoxFit.fill,
+        // Estas fotos llegan a 1536 px y el marco donde viven mide 232 de
+        // alto: sin tope se descomprimian a 4-5 MB cada una, y aqui se
+        // dibujan hasta tres a la vez (completa, atenuada y recortada).
+        cacheWidth: anchoDecode(context),
+        semanticLabel: 'Componentes del equipo ${equipo.equipo}',
+        errorBuilder: (_, __, ___) => _fallback(compact: true),
+      ),
     );
   }
 
@@ -184,17 +184,16 @@ class ReplacementFocusImage extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: AppColors.border),
       ),
-      child: const Column(
+      child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.precision_manufacturing_outlined,
+          const Icon(Icons.precision_manufacturing_outlined,
               size: 38, color: AppColors.textSecondary),
-          SizedBox(height: 6),
+          const SizedBox(height: 6),
           Text(
             'Imagen no disponible',
-            style: TextStyle(
+            style: AppText.cuerpoFuerte.copyWith(
               color: AppColors.textSecondary,
-              fontWeight: FontWeight.w600,
             ),
           ),
         ],

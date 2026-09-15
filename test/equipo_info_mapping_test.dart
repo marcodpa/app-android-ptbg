@@ -15,6 +15,17 @@ void main() {
       'CICLO': '60',
       'RPM': '1780',
       'ARRANQUE': 'DIRECTO',
+      'BRGS_DRIVE': '6312',
+      'BRGS_OPP': '6310',
+      'LUBRICACION': 'GRASA EP2',
+      'MOTORES_LUB': 'MOTOR PRINCIPAL',
+      'CANT_MOT_LUB': '12,5 gramos',
+      'ELEC_MOT_LUB': 6,
+      'MAN_MOT_LUB': 5,
+      'ELEMENTO_LUB': 'BOMBA',
+      'CANT_ELEM_LUB': 20,
+      'ELEC_ELEM_LUB': 10,
+      'MAN_ELEM_LUB': 8.33,
     });
 
     expect(info.localizacion, 20);
@@ -28,6 +39,17 @@ void main() {
     expect(info.hz, '60');
     expect(info.rpm, '1780');
     expect(info.start, 'DIRECTO');
+    expect(info.brgsDrive, '6312');
+    expect(info.brgsOpp, '6310');
+    expect(info.lubricacion, 'GRASA EP2');
+    expect(info.motoresLub, 'MOTOR PRINCIPAL');
+    expect(info.cantMotLub, 12.5);
+    expect(info.elecMotLub, 6);
+    expect(info.manMotLub, 5);
+    expect(info.elementoLub, 'BOMBA');
+    expect(info.cantElemLub, 20);
+    expect(info.elecElemLub, 10);
+    expect(info.manElemLub, 8.33);
   });
 
   test('mapea aliases enviados por /equipos', () {

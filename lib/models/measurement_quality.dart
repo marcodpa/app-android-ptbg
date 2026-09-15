@@ -22,7 +22,7 @@ class VibrationQuality {
     if (value >= 50) {
       return const VibrationQuality._(
         level: VibrationQualityLevel.extreme,
-        label: 'Revisar valor',
+        label: 'Muy alto',
         detail: 'Valor demasiado elevado, posible error de captura',
       );
     }
@@ -36,13 +36,13 @@ class VibrationQuality {
     if (value >= 4.5) {
       return const VibrationQuality._(
         level: VibrationQualityLevel.warning,
-        label: 'Alerta',
+        label: 'Medio',
         detail: 'Vibracion por encima de lo normal',
       );
     }
     return const VibrationQuality._(
       level: VibrationQualityLevel.normal,
-      label: 'Normal',
+      label: 'Bajo',
       detail: 'Lectura dentro de rango esperado',
     );
   }

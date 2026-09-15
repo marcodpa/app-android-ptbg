@@ -28,6 +28,13 @@ class Equipo {
   final String sistema;
   final String subsistema;
   final String? scada;
+
+  /// Familia de compatibilidad, si la planta se la asigno.
+  ///
+  /// Null en los equipos originales: esos se resuelven con la lista fija del
+  /// codigo. Los registrados en campo la traen porque se pregunta al crearlos.
+  final int? familiaCompat;
+
   final EquipoInfo? info;
 
   const Equipo({
@@ -41,6 +48,7 @@ class Equipo {
     required this.sistema,
     this.subsistema = '',
     this.scada,
+    this.familiaCompat,
     this.info,
   });
 
@@ -55,8 +63,9 @@ class Equipo {
     );
 
     final id = _int(j['ID'] ?? j['id'] ?? j['ID_EQ'] ?? j['idEq'] ?? 0);
-    final codeSys =
-        _int(j['CODE_SYS'] ?? j['codeSys'] ?? j['CD_SYS'] ?? j['cdSys'] ?? 0);
+    final codeSys = _int(
+      j['CODE_SYS'] ?? j['codeSys'] ?? j['CD_SYS'] ?? j['cdSys'] ?? 0,
+    );
     final equipo = (j['EQUIPO'] ?? j['equipo'] ?? '').toString();
     final sistema = (j['SISTEMA'] ??
             j['sistema'] ??
@@ -110,18 +119,30 @@ class Equipo {
       equipo: equipo,
       localizacion: localizacion,
       qrCode: qrCode,
-      puntos: _int(j['NUM_PUNTOS'] ??
-          j['numPuntos'] ??
-          j['PUNTOS_MEDICION'] ??
-          j['PUNTOS'] ??
-          j['puntos'] ??
-          0),
+      puntos: _int(
+        j['NUM_PUNTOS'] ??
+            j['numPuntos'] ??
+            j['PUNTOS_MEDICION'] ??
+            j['PUNTOS'] ??
+            j['puntos'] ??
+            0,
+      ),
       ptEq: rawPtEq,
       sistema: sistema,
       subsistema: subsistema,
       scada: scada,
+      familiaCompat: _intONulo(
+        j['FAMILIA_COMPAT'] ?? j['familia_compat'] ?? j['familiaCompat'],
+      ),
       info: parsedInfo,
     );
+  }
+
+  static int? _intONulo(dynamic v) {
+    if (v == null) return null;
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return int.tryParse(v.toString().trim());
   }
 
   Map<String, dynamic> toMap() => {
@@ -136,10 +157,17 @@ class Equipo {
         'sistema': sistema,
         'subsistema': subsistema,
         'scada': scada,
+        'familiaCompat': familiaCompat,
         'info': info?.toMap(),
       };
 
-  Equipo copyWith({EquipoInfo? info, int? ptEq, String? subsistema}) => Equipo(
+  Equipo copyWith({
+    EquipoInfo? info,
+    int? ptEq,
+    String? subsistema,
+    int? familiaCompat,
+  }) =>
+      Equipo(
         id: id,
         codeSys: codeSys,
         equipo: equipo,
@@ -150,6 +178,7 @@ class Equipo {
         sistema: sistema,
         subsistema: subsistema ?? this.subsistema,
         scada: scada,
+        familiaCompat: familiaCompat ?? this.familiaCompat,
         info: info ?? this.info,
       );
 
@@ -167,34 +196,11 @@ class Equipo {
   int get visualType => resolverTipoVisual(rawPtEq: ptEq);
 
   static int resolverTipoVisual({required int rawPtEq}) {
-    if (rawPtEq >= 1 && rawPtEq <= 9) return rawPtEq;
+    if (rawPtEq >= 1 && rawPtEq <= 10) return rawPtEq;
     return 1;
   }
 
   static int _int(dynamic v) => v is int ? v : int.tryParse(v.toString()) ?? 0;
-
-  static String _norm(String value) => value
-      .toUpperCase()
-      .replaceAll('Á', 'A')
-      .replaceAll('É', 'E')
-      .replaceAll('Í', 'I')
-      .replaceAll('Ó', 'O')
-      .replaceAll('Ú', 'U')
-      .replaceAll('.', ' ')
-      .replaceAll(',', ' ')
-      .replaceAll('-', ' ')
-      .replaceAll('_', ' ')
-      .replaceAll('/', ' ')
-      .replaceAll(RegExp(r'\s+'), ' ')
-      .trim();
-
-  static bool _containsAny(String value, List<String> tokens) {
-    final v = _norm(value);
-    for (final token in tokens) {
-      if (v.contains(_norm(token))) return true;
-    }
-    return false;
-  }
 }
 
 class EquipoInfo {
@@ -210,6 +216,17 @@ class EquipoInfo {
   final String? hz;
   final String? ph;
   final String? rpm;
+  final String? brgsDrive;
+  final String? brgsOpp;
+  final String? lubricacion;
+  final String? motoresLub;
+  final double? cantMotLub;
+  final double? elecMotLub;
+  final double? manMotLub;
+  final String? elementoLub;
+  final double? cantElemLub;
+  final double? elecElemLub;
+  final double? manElemLub;
 
   const EquipoInfo({
     required this.localizacion,
@@ -224,6 +241,17 @@ class EquipoInfo {
     this.hz,
     this.ph,
     this.rpm,
+    this.brgsDrive,
+    this.brgsOpp,
+    this.lubricacion,
+    this.motoresLub,
+    this.cantMotLub,
+    this.elecMotLub,
+    this.manMotLub,
+    this.elementoLub,
+    this.cantElemLub,
+    this.elecElemLub,
+    this.manElemLub,
   });
 
   bool get isEmpty =>
@@ -237,10 +265,17 @@ class EquipoInfo {
       _blank(sf) &&
       _blank(hz) &&
       _blank(ph) &&
-      _blank(rpm);
+      _blank(rpm) &&
+      _blank(brgsDrive) &&
+      _blank(brgsOpp) &&
+      _blank(lubricacion) &&
+      _blank(motoresLub) &&
+      _blank(elementoLub);
 
-  factory EquipoInfo.fromJson(Map<String, dynamic> j,
-      {int? fallbackLocalizacion}) {
+  factory EquipoInfo.fromJson(
+    Map<String, dynamic> j, {
+    int? fallbackLocalizacion,
+  }) {
     return EquipoInfo(
       localizacion: _int(
         j['LC_EQ'] ??
@@ -251,40 +286,82 @@ class EquipoInfo {
             fallbackLocalizacion ??
             0,
       ),
-      marca:
-          _str(j['MARCA_INFO'] ?? j['MARCA'] ?? j['marca'] ?? j['marcaInfo']),
+      marca: _str(
+        j['MARCA_INFO'] ?? j['MARCA'] ?? j['marca'] ?? j['marcaInfo'],
+      ),
       serial: _str(
-          j['SERIAL_INFO'] ?? j['SERIAL'] ?? j['serial'] ?? j['serialInfo']),
-      modelo: _str(j['MODEL_INFO'] ??
-          j['MODELO_INFO'] ??
-          j['MODELO'] ??
-          j['modelo'] ??
-          j['modelInfo']),
+        j['SERIAL_INFO'] ?? j['SERIAL'] ?? j['serial'] ?? j['serialInfo'],
+      ),
+      modelo: _str(
+        j['MODEL_INFO'] ??
+            j['MODELO_INFO'] ??
+            j['MODELO'] ??
+            j['modelo'] ??
+            j['modelInfo'],
+      ),
       hp: _str(j['HP_INFO'] ?? j['HP'] ?? j['hp'] ?? j['hpInfo']),
-      start: _str(j['START_INFO'] ??
-          j['ARRANQUE_INFO'] ??
-          j['ARRANQUE'] ??
-          j['start'] ??
-          j['startInfo']),
-      volts: _str(j['VOLTS_INFO'] ??
-          j['VOLTAJE_INFO'] ??
-          j['VOLTAJE'] ??
-          j['TENSION'] ??
-          j['volts'] ??
-          j['voltsInfo']),
-      fla: _str(j['FLA_INFO'] ??
-          j['CORRIENTE_INFO'] ??
-          j['CORRIENTE'] ??
-          j['fla'] ??
-          j['flaInfo']),
+      start: _str(
+        j['START_INFO'] ??
+            j['ARRANQUE_INFO'] ??
+            j['ARRANQUE'] ??
+            j['start'] ??
+            j['startInfo'],
+      ),
+      volts: _str(
+        j['VOLTS_INFO'] ??
+            j['VOLTAJE_INFO'] ??
+            j['VOLTAJE'] ??
+            j['TENSION'] ??
+            j['volts'] ??
+            j['voltsInfo'],
+      ),
+      fla: _str(
+        j['FLA_INFO'] ??
+            j['CORRIENTE_INFO'] ??
+            j['CORRIENTE'] ??
+            j['fla'] ??
+            j['flaInfo'],
+      ),
       sf: _str(j['SF_INFO'] ?? j['SF'] ?? j['sf'] ?? j['sfInfo']),
-      hz: _str(j['HZ_INFO'] ??
-          j['CICLO_INFO'] ??
-          j['CICLO'] ??
-          j['hz'] ??
-          j['hzInfo']),
+      hz: _str(
+        j['HZ_INFO'] ?? j['CICLO_INFO'] ?? j['CICLO'] ?? j['hz'] ?? j['hzInfo'],
+      ),
       ph: _str(j['PH_INFO'] ?? j['PH'] ?? j['ph'] ?? j['phInfo']),
       rpm: _str(j['RPM_INFO'] ?? j['RPM'] ?? j['rpm'] ?? j['rpmInfo']),
+      brgsDrive: _str(
+        j['BRGS_DRIVE_INFO'] ??
+            j['BRGS_DRIVE'] ??
+            j['brgsDrive'] ??
+            j['brgs_drive'],
+      ),
+      brgsOpp: _str(
+        j['BRGS_OPP_INFO'] ?? j['BRGS_OPP'] ?? j['brgsOpp'] ?? j['brgs_opp'],
+      ),
+      lubricacion: _str(
+        j['LUBRICACION_INFO'] ?? j['LUBRICACION'] ?? j['lubricacion'],
+      ),
+      motoresLub: _str(j['MOTORES_LUB'] ?? j['motoresLub'] ?? j['motores_lub']),
+      cantMotLub: _double(
+        j['CANT_MOT_LUB'] ?? j['cantMotLub'] ?? j['cant_mot_lub'],
+      ),
+      elecMotLub: _double(
+        j['ELEC_MOT_LUB'] ?? j['elecMotLub'] ?? j['elec_mot_lub'],
+      ),
+      manMotLub: _double(
+        j['MAN_MOT_LUB'] ?? j['manMotLub'] ?? j['man_mot_lub'],
+      ),
+      elementoLub: _str(
+        j['ELEMENTO_LUB'] ?? j['elementoLub'] ?? j['elemento_lub'],
+      ),
+      cantElemLub: _double(
+        j['CANT_ELEM_LUB'] ?? j['cantElemLub'] ?? j['cant_elem_lub'],
+      ),
+      elecElemLub: _double(
+        j['ELEC_ELEM_LUB'] ?? j['elecElemLub'] ?? j['elec_elem_lub'],
+      ),
+      manElemLub: _double(
+        j['MAN_ELEM_LUB'] ?? j['manElemLub'] ?? j['man_elem_lub'],
+      ),
     );
   }
 
@@ -301,6 +378,17 @@ class EquipoInfo {
         'hz': hz,
         'ph': ph,
         'rpm': rpm,
+        'brgs_drive': brgsDrive,
+        'brgs_opp': brgsOpp,
+        'lubricacion': lubricacion,
+        'motores_lub': motoresLub,
+        'cant_mot_lub': cantMotLub,
+        'elec_mot_lub': elecMotLub,
+        'man_mot_lub': manMotLub,
+        'elemento_lub': elementoLub,
+        'cant_elem_lub': cantElemLub,
+        'elec_elem_lub': elecElemLub,
+        'man_elem_lub': manElemLub,
       };
 
   String get shortSerial => _clean(serial, fallback: 'Sin serial');
@@ -328,6 +416,15 @@ class EquipoInfo {
   }
 
   static int _int(dynamic v) => v is int ? v : int.tryParse(v.toString()) ?? 0;
+  static double? _double(dynamic v) {
+    if (v == null) return null;
+    if (v is num) return v.toDouble();
+    final text = v.toString().trim().replaceAll(',', '.');
+    final direct = double.tryParse(text);
+    if (direct != null) return direct;
+    final match = RegExp(r'-?\d+(?:\.\d+)?').firstMatch(text);
+    return match == null ? null : double.tryParse(match.group(0)!);
+  }
 }
 
 // ── MedicionStep — paso de captura guiada ─────────────────────────────
@@ -379,6 +476,7 @@ class MedicionLocal {
   final String? marca;
   final String? modelo;
   final String? serial;
+  final int? odt;
   final bool sincronizado;
   final String? errorSync;
 
@@ -396,6 +494,7 @@ class MedicionLocal {
     this.marca,
     this.modelo,
     this.serial,
+    this.odt,
     this.sincronizado = false,
     this.errorSync,
   });
@@ -414,6 +513,9 @@ class MedicionLocal {
         marca: (m['marca'] ?? m['MARCA'])?.toString(),
         modelo: (m['modelo'] ?? m['MODELO'])?.toString(),
         serial: (m['serial'] ?? m['SERIAL'])?.toString(),
+        odt: m['odt'] == null && m['ODT'] == null
+            ? null
+            : _toInt(m['odt'] ?? m['ODT']),
         sincronizado: _toInt(m['sincronizado']) == 1,
         errorSync: m['error_sync']?.toString(),
         valores: _vals(m),
@@ -496,11 +598,13 @@ class UltimaLectura {
             : h;
 
     final iso = DateTime.tryParse(
-        '${isoFecha}T${isoHora.isEmpty ? '00:00:00' : isoHora}');
+      '${isoFecha}T${isoHora.isEmpty ? '00:00:00' : isoHora}',
+    );
     if (iso != null) return iso;
 
-    final match =
-        RegExp(r'^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$').firstMatch(isoFecha);
+    final match = RegExp(
+      r'^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$',
+    ).firstMatch(isoFecha);
     if (match != null) {
       final parts = isoHora.split(':');
       var year = int.tryParse(match.group(3) ?? '') ?? 1970;

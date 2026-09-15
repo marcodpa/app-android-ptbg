@@ -97,6 +97,12 @@ class AlignmentPlanResolver {
   );
 
   static List<AlignmentSection> fromPuntos(int puntos) {
+    if (puntos == 10) {
+      return [
+        AlignmentSection(
+            title: 'ALINEACIÓN DEL MOTOR', fields: _motorPump.fields)
+      ];
+    }
     if (const {1, 2, 9}.contains(puntos)) return const [_motorPump];
     if (puntos == 6) return const [_motorGearbox, _gearboxPump];
     return const [];

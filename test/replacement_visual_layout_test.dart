@@ -67,6 +67,6 @@ void main() {
 
   test('un tipo desconocido no inventa un layout', () {
     expect(ReplacementVisualResolver.fromPuntos(0), isNull);
-    expect(ReplacementVisualResolver.fromPuntos(10), isNull);
+    expect(ReplacementVisualResolver.fromPuntos(11), isNull);
   });
 }

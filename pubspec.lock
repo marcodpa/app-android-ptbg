@@ -9,14 +9,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.0.9"
-  args:
-    dependency: transitive
-    description:
-      name: args
-      sha256: d0481093c50b1da8910eb0bb301626d4d8eb7284aa739614d2b394ee09e3ea04
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.7.0"
   async:
     dependency: transitive
     description:
@@ -26,7 +18,7 @@ packages:
     source: hosted
     version: "2.13.1"
   barcode:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: barcode
       sha256: "7b6729c37e3b7f34233e2318d866e8c48ddb46c1f7ad01ff7bb2a8de1da2b9f4"
@@ -73,22 +65,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.19.1"
-  connectivity_plus:
-    dependency: "direct main"
-    description:
-      name: connectivity_plus
-      sha256: b5e72753cf63becce2c61fd04dfe0f1c430cc5278b53a1342dc5ad839eab29ec
-      url: "https://pub.dev"
-    source: hosted
-    version: "6.1.5"
-  connectivity_plus_platform_interface:
-    dependency: transitive
-    description:
-      name: connectivity_plus_platform_interface
-      sha256: "3c09627c536d22fd24691a905cdd8b14520de69da52c7a97499c8be5284a32ed"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.1.0"
   crypto:
     dependency: transitive
     description:
@@ -97,14 +73,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.7"
-  dbus:
-    dependency: transitive
-    description:
-      name: dbus
-      sha256: "792974a4007974fbc5c1b5433eb2330a9db3e368c3f906253af4c007d0f49a91"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.7.13"
   fake_async:
     dependency: transitive
     description:
@@ -150,6 +118,11 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.2"
+  flutter_localizations:
+    dependency: "direct main"
+    description: flutter
+    source: sdk
+    version: "0.0.0"
   flutter_test:
     dependency: "direct dev"
     description: flutter
@@ -188,10 +161,10 @@ packages:
     dependency: "direct main"
     description:
       name: intl
-      sha256: d6f56758b7d3014a48af9701c085700aac781a92a87a62b1333b46d8879661cf
+      sha256: "3df61194eb431efc39c4ceba583b95633a403f46c9fd341e550ce0bfa50e9aa5"
       url: "https://pub.dev"
     source: hosted
-    version: "0.19.0"
+    version: "0.20.2"
   leak_tracker:
     dependency: transitive
     description:
@@ -256,22 +229,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "5.2.3"
-  nested:
-    dependency: transitive
-    description:
-      name: nested
-      sha256: "03bac4c528c64c95c722ec99280375a6f2fc708eec17c7b3f07253b626cd2a20"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.0.0"
-  nm:
-    dependency: transitive
-    description:
-      name: nm
-      sha256: "2c9aae4127bdc8993206464fcc063611e0e36e72018696cd9631023a31b24254"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.5.0"
   path:
     dependency: "direct main"
     description:
@@ -368,14 +325,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "5.15.0"
-  provider:
-    dependency: "direct main"
-    description:
-      name: provider
-      sha256: "4e82183fa20e5ca25703ead7e05de9e4cceed1fbd1eadc1ac3cb6f565a09f272"
-      url: "https://pub.dev"
-    source: hosted
-    version: "6.1.5+1"
   qr:
     dependency: transitive
     description:

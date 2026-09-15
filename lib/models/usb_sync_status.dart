@@ -15,6 +15,23 @@ class UsbSyncStatus {
     this.requestId,
   });
 
+  /// Igualdad por valor, para que las pantallas que sondean el estado cada
+  /// pocos segundos puedan preguntar "¿cambio algo?" antes de redibujarse.
+  /// Sin esto, cada tick del sondeo reconstruia pantallas de mas de mil
+  /// lineas aunque el estado fuera identico al anterior.
+  @override
+  bool operator ==(Object other) =>
+      other is UsbSyncStatus &&
+      other.online == online &&
+      other.rawStatus == rawStatus &&
+      other.label == label &&
+      other.detail == detail &&
+      other.requestId == requestId;
+
+  @override
+  int get hashCode =>
+      Object.hash(online, rawStatus, label, detail, requestId);
+
   factory UsbSyncStatus.fromValues({
     required String? status,
     required String? serial,

@@ -81,7 +81,7 @@ void main() {
 
     test('no inventa componentes para un tipo desconocido', () {
       expect(ReplacementComponentResolver.fromPuntos(0), isEmpty);
-      expect(ReplacementComponentResolver.fromPuntos(10), isEmpty);
+      expect(ReplacementComponentResolver.fromPuntos(11), isEmpty);
     });
   });
 }

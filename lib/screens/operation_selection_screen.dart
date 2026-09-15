@@ -3,15 +3,26 @@ import 'package:flutter/material.dart';
 import '../models/models.dart';
 import '../models/operation_flow.dart';
 import '../theme.dart';
+import '../db/db_helper.dart';
 import 'alignment_capture_screen.dart';
 import 'capture_screen.dart';
 import 'replacement_screen.dart';
 import 'temperature_capture_screen.dart';
+import 'lubrication_capture_screen.dart';
+import 'belt_adjustment_screen.dart';
+import 'limpieza_plato_screen.dart';
+import 'coupling_change_screen.dart';
+import '../widgets/industrial_navigation.dart';
+import '../widgets/avisos.dart';
 
 typedef OperationLauncher = Future<bool?> Function(
   BuildContext context,
   OperationType operation,
   Equipo equipo,
+);
+typedef WorkOrderCreator = Future<int> Function(
+  Equipo equipo,
+  Set<OperationType> services,
 );
 
 class OperationSelectionScreen extends StatefulWidget {
@@ -19,10 +30,12 @@ class OperationSelectionScreen extends StatefulWidget {
     super.key,
     required this.equipo,
     this.launcher,
+    this.workOrderCreator,
   });
 
   final Equipo equipo;
   final OperationLauncher? launcher;
+  final WorkOrderCreator? workOrderCreator;
 
   @override
   State<OperationSelectionScreen> createState() =>
@@ -33,10 +46,20 @@ class _OperationSelectionScreenState extends State<OperationSelectionScreen> {
   final Set<OperationType> _selected = <OperationType>{};
   OperationType? _first;
   bool _opening = false;
+  int? _activeOdt;
+  late Equipo _flowEquipo;
+
+  @override
+  void initState() {
+    super.initState();
+    _flowEquipo = widget.equipo;
+  }
 
   bool get _canStart =>
       !_opening &&
-      (_selected.length == 1 || (_selected.length > 1 && _first != null));
+      (_selected.length == 1 ||
+          _selected.contains(OperationType.replacement) ||
+          (_selected.length > 1 && _first != null));
 
   void _toggle(OperationType operation) {
     setState(() {
@@ -45,6 +68,8 @@ class _OperationSelectionScreenState extends State<OperationSelectionScreen> {
       }
       if (_selected.length == 1) {
         _first = _selected.first;
+      } else if (_selected.contains(OperationType.replacement)) {
+        _first = OperationType.replacement;
       } else {
         _first = null;
       }
@@ -53,40 +78,73 @@ class _OperationSelectionScreenState extends State<OperationSelectionScreen> {
 
   Future<void> _start() async {
     if (!_canStart) return;
-    final first = _first ?? _selected.first;
+    if (widget.launcher == null) {
+      try {
+        final services = Set<OperationType>.from(_selected);
+        _activeOdt = widget.workOrderCreator != null
+            ? await widget.workOrderCreator!(widget.equipo, services)
+            : await DbHelper.instance.createWorkOrder(
+                equipo: widget.equipo,
+                services: services,
+              );
+      } catch (error) {
+        if (!mounted) return;
+        avisar(context, 'No se pudo generar la ODT: ${mensajeDeError(error)}',
+            AppColors.error);
+        return;
+      }
+    }
+    final first = _selected.contains(OperationType.replacement)
+        ? OperationType.replacement
+        : (_first ?? _selected.first);
     final flow = OperationFlow(selected: _selected.toList(), current: first);
     final ordered = <OperationType>[flow.current, ...flow.pending];
     setState(() => _opening = true);
     await _runOperations(ordered, 0);
   }
 
-  Future<void> _runOperations(
-    List<OperationType> operations,
-    int index,
-  ) async {
+  Future<void> _runOperations(List<OperationType> operations, int index) async {
     final completed = await _launcher(
       context,
       operations[index],
-      widget.equipo,
+      _flowEquipo,
     );
     if (!mounted) return;
     if (completed != true) {
+      if (_activeOdt != null) {
+        await DbHelper.instance.markWorkOrderServicesNotPerformed(
+          _activeOdt!,
+          operations.skip(index),
+        );
+      }
       setState(() => _opening = false);
       return;
     }
+    if (operations[index] == OperationType.replacement &&
+        widget.launcher == null) {
+      final updatedInfo =
+          await DbHelper.instance.getEquipoInfo(widget.equipo.localizacion);
+      if (updatedInfo != null) {
+        _flowEquipo = widget.equipo.copyWith(info: updatedInfo);
+      }
+    }
     final nextIndex = index + 1;
+    // Se llega hasta aqui despues de varios await; sin esta comprobacion el
+    // context puede estar muerto y tanto el pop como el dialogo fallan.
+    if (!mounted) return;
     if (nextIndex >= operations.length) {
       setState(() => _opening = false);
       Navigator.pop(context);
       return;
     }
     final next = operations[nextIndex];
+    final navegador = Navigator.of(context);
     final continueFlow = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Operacion completada'),
-        content: Text('Deseas continuar con ${_label(next)}?'),
+        title: const Text('Operación completada'),
+        content: Text('¿Deseas continuar con ${_label(next)}?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
@@ -101,8 +159,15 @@ class _OperationSelectionScreenState extends State<OperationSelectionScreen> {
     );
     if (!mounted) return;
     if (continueFlow != true) {
+      if (_activeOdt != null) {
+        await DbHelper.instance.markWorkOrderServicesNotPerformed(
+          _activeOdt!,
+          operations.skip(nextIndex),
+        );
+      }
+      if (!mounted) return;
       setState(() => _opening = false);
-      Navigator.pop(context);
+      navegador.pop();
       return;
     }
     await _runOperations(operations, nextIndex);
@@ -119,13 +184,21 @@ class _OperationSelectionScreenState extends State<OperationSelectionScreen> {
     final Widget screen;
     switch (operation) {
       case OperationType.vibration:
-        screen = CaptureScreen(equipo: equipo);
+        screen = CaptureScreen(equipo: equipo, odt: _activeOdt);
       case OperationType.temperature:
-        screen = TemperatureCaptureScreen(equipo: equipo);
+        screen = TemperatureCaptureScreen(equipo: equipo, odt: _activeOdt);
+      case OperationType.lubrication:
+        screen = LubricationCaptureScreen(equipo: equipo, odt: _activeOdt);
       case OperationType.replacement:
-        screen = ReplacementScreen(equipo: equipo);
+        screen = ReplacementScreen(equipo: equipo, odt: _activeOdt);
       case OperationType.alignment:
-        screen = AlignmentCaptureScreen(equipo: equipo);
+        screen = AlignmentCaptureScreen(equipo: equipo, odt: _activeOdt);
+      case OperationType.couplingChange:
+        screen = CouplingChangeScreen(equipo: equipo, odt: _activeOdt);
+      case OperationType.beltAdjustment:
+        screen = BeltAdjustmentScreen(equipo: equipo, odt: _activeOdt);
+      case OperationType.plateCleaning:
+        screen = LimpiezaPlatoScreen(equipo: equipo, odt: _activeOdt!);
     }
     return Navigator.push<bool>(
       context,
@@ -139,10 +212,18 @@ class _OperationSelectionScreenState extends State<OperationSelectionScreen> {
         return 'Vibracion';
       case OperationType.temperature:
         return 'Medición de temperatura';
+      case OperationType.lubrication:
+        return 'Lubricación';
       case OperationType.replacement:
         return 'Reemplazo de equipo';
       case OperationType.alignment:
         return 'Alineación';
+      case OperationType.couplingChange:
+        return 'Cambio de coupling';
+      case OperationType.beltAdjustment:
+        return 'Ajuste de correa';
+      case OperationType.plateCleaning:
+        return 'Limpieza de plato';
     }
   }
 
@@ -150,10 +231,8 @@ class _OperationSelectionScreenState extends State<OperationSelectionScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.headerTop,
-        foregroundColor: Colors.white,
-        title: const Text('Iniciar medicion'),
+      appBar: const IndustrialAppBar(
+        titulo: 'Iniciar medición',
       ),
       body: SafeArea(
         child: Column(
@@ -164,20 +243,17 @@ class _OperationSelectionScreenState extends State<OperationSelectionScreen> {
                 children: [
                   _equipmentSummary(),
                   const SizedBox(height: 22),
-                  const Text(
+                  Text(
                     'Que deseas realizar?',
-                    style: TextStyle(
+                    style: AppText.titulo.copyWith(
                       color: AppColors.textPrimary,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
                     ),
                   ),
                   const SizedBox(height: 6),
-                  const Text(
+                  Text(
                     'Puedes seleccionar una o varias operaciones.',
-                    style: TextStyle(
+                    style: AppText.subtitulo.copyWith(
                       color: AppColors.textSecondary,
-                      fontSize: 13,
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -196,6 +272,17 @@ class _OperationSelectionScreenState extends State<OperationSelectionScreen> {
                     title: 'Medición de temperatura',
                     subtitle: 'Captura guiada de una lectura en °C por punto',
                   ),
+                  const SizedBox(height: 12),
+                  if (widget.equipo.puntos >= 1 &&
+                      widget.equipo.puntos <= 10) ...[
+                    _operationTile(
+                      key: const Key('operation-lubrication'),
+                      operation: OperationType.lubrication,
+                      icon: Icons.oil_barrel_rounded,
+                      title: 'Lubricación',
+                      subtitle: 'Registrar los gramos aplicados por punto',
+                    ),
+                  ],
                   if (AlignmentPlanResolver.isEligible(
                     widget.equipo.puntos,
                   )) ...[
@@ -216,35 +303,94 @@ class _OperationSelectionScreenState extends State<OperationSelectionScreen> {
                     title: 'Reemplazo de equipo',
                     subtitle: 'Registrar cambio de componentes',
                   ),
+                  if (CouplingChangeResolver.isEligible(
+                    widget.equipo.ptEq,
+                  )) ...[
+                    const SizedBox(height: 12),
+                    _operationTile(
+                      key: const Key('operation-coupling-change'),
+                      operation: OperationType.couplingChange,
+                      icon: Icons.settings_input_component_rounded,
+                      title: 'Cambio de coupling',
+                      subtitle: 'Confirmar si se realizó el cambio (Sí o No)',
+                    ),
+                  ],
+                  if (BeltAdjustmentResolver.isEligible(
+                    widget.equipo.ptEq,
+                  )) ...[
+                    const SizedBox(height: 12),
+                    _operationTile(
+                      key: const Key('operation-belt-adjustment'),
+                      operation: OperationType.beltAdjustment,
+                      icon: Icons.settings_backup_restore_rounded,
+                      title: 'Ajuste de correa',
+                      subtitle: 'Registrar el ajuste y la tensión',
+                    ),
+                  ],
+                  if (widget.equipo.ptEq == 10) ...[
+                    const SizedBox(height: 12),
+                    _operationTile(
+                        key: const Key('operation-plate-cleaning'),
+                        operation: OperationType.plateCleaning,
+                        icon: Icons.cleaning_services_rounded,
+                        title: 'Limpieza de plato',
+                        subtitle: 'Registrar limpieza y horas del horómetro'),
+                  ],
                   if (_selected.length > 1) ...[
                     const SizedBox(height: 24),
-                    const Text(
-                      'Elige cual comienza',
-                      style: TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: _selected
-                          .map(
-                            (operation) => _firstChoice(
-                              operation,
-                              'Primero ${_shortLabel(operation)}',
+                    if (_selected.contains(OperationType.replacement))
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppColors.warning.withValues(alpha: .12),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.warning),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.info_outline_rounded,
+                                color: AppColors.warning),
+                            const SizedBox(width: 9),
+                            Expanded(
+                              child: Text(
+                                'El reemplazo se guardará primero. Las demás mediciones usarán los datos nuevos del equipo.',
+                                style: AppText.cuerpoFuerte.copyWith(
+                                  color: AppColors.warning,
+                                ),
+                              ),
                             ),
-                          )
-                          .toList(),
-                    ),
+                          ],
+                        ),
+                      )
+                    else ...[
+                      Text(
+                        'Elige cual comienza',
+                        style: AppText.seccion.copyWith(
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: _selected
+                            .map(
+                              (operation) => _firstChoice(
+                                operation,
+                                'Primero ${_shortLabel(operation)}',
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ],
                   ],
                 ],
               ),
             ),
             Container(
-              color: AppColors.surface,
+              color: esterThemeController.isDark
+                  ? AppColors.surface
+                  : Colors.white,
               padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
               child: SizedBox(
                 width: double.infinity,
@@ -275,13 +421,19 @@ class _OperationSelectionScreenState extends State<OperationSelectionScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.headerTop,
+        color: esterThemeController.isDark ? AppColors.headerTop : Colors.white,
+        border: esterThemeController.isDark
+            ? null
+            : Border.all(color: const Color(0xFFE2E8F0)),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         children: [
-          const Icon(Icons.precision_manufacturing_outlined,
-              color: AppColors.teal, size: 32),
+          const Icon(
+            Icons.precision_manufacturing_outlined,
+            color: AppColors.teal,
+            size: 32,
+          ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -289,17 +441,20 @@ class _OperationSelectionScreenState extends State<OperationSelectionScreen> {
               children: [
                 Text(
                   widget.equipo.equipo,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
+                  style: AppText.seccion.copyWith(
+                    color: esterThemeController.isDark
+                        ? Colors.white
+                        : const Color(0xFF111827),
                   ),
                 ),
                 const SizedBox(height: 3),
                 Text(
                   '${widget.equipo.sistema}  |  LOC ${widget.equipo.localizacion}',
-                  style:
-                      const TextStyle(color: Color(0xFFB8C7DE), fontSize: 12),
+                  style: AppText.apoyo.copyWith(
+                    color: esterThemeController.isDark
+                        ? const Color(0xFFB8C7DE)
+                        : const Color(0xFF64748B),
+                  ),
                 ),
               ],
             ),
@@ -319,7 +474,11 @@ class _OperationSelectionScreenState extends State<OperationSelectionScreen> {
     final selected = _selected.contains(operation);
     return Material(
       key: key,
-      color: selected ? AppColors.tealLight : AppColors.surface,
+      color: selected
+          ? AppColors.teal.withValues(alpha: .14)
+          : esterThemeController.isDark
+              ? AppColors.surface
+              : Colors.white,
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
@@ -336,23 +495,29 @@ class _OperationSelectionScreenState extends State<OperationSelectionScreen> {
           ),
           child: Row(
             children: [
-              Icon(icon,
-                  size: 34,
-                  color: selected ? AppColors.tealDark : AppColors.headerTop),
+              Icon(
+                icon,
+                size: 34,
+                color: selected ? AppColors.teal : AppColors.textSecondary,
+              ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title,
-                        style: const TextStyle(
-                            color: AppColors.textPrimary,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800)),
+                    Text(
+                      title,
+                      style: AppText.seccion.copyWith(
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
                     const SizedBox(height: 4),
-                    Text(subtitle,
-                        style: const TextStyle(
-                            color: AppColors.textSecondary, fontSize: 12)),
+                    Text(
+                      subtitle,
+                      style: AppText.apoyo.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -374,10 +539,10 @@ class _OperationSelectionScreenState extends State<OperationSelectionScreen> {
     return OutlinedButton(
       onPressed: () => setState(() => _first = operation),
       style: OutlinedButton.styleFrom(
-        foregroundColor: selected ? Colors.white : AppColors.headerTop,
-        backgroundColor: selected ? AppColors.headerTop : AppColors.surface,
+        foregroundColor: selected ? Colors.white : AppColors.textPrimary,
+        backgroundColor: selected ? AppColors.tealDark : AppColors.surface2,
         side: BorderSide(
-          color: selected ? AppColors.headerTop : AppColors.borderDark,
+          color: selected ? AppColors.teal : AppColors.borderDark,
         ),
         minimumSize: const Size(0, 52),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -388,14 +553,22 @@ class _OperationSelectionScreenState extends State<OperationSelectionScreen> {
 
   static String _shortLabel(OperationType operation) {
     switch (operation) {
+      case OperationType.plateCleaning:
+        return 'Limpieza de plato';
       case OperationType.vibration:
         return 'Vibracion';
       case OperationType.temperature:
         return 'Temperatura';
+      case OperationType.lubrication:
+        return 'Lubricación';
       case OperationType.replacement:
         return 'Reemplazo';
       case OperationType.alignment:
         return 'Alineación';
+      case OperationType.couplingChange:
+        return 'Coupling';
+      case OperationType.beltAdjustment:
+        return 'Correa';
     }
   }
 }

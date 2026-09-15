@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'models.dart';
 
-enum OrientacionMedicion { horizontal, vertical, axial }
-
 class PuntoVisual {
   final int punto;
   final double x;
@@ -25,6 +23,7 @@ class EquipoVisualConfig {
   final String asset;
   final String cleanAsset;
   final BoxFit fit;
+  final Color? backgroundColor;
   final double aspectRatio;
   final List<PuntoVisual> puntos;
 
@@ -35,6 +34,7 @@ class EquipoVisualConfig {
     required this.puntos,
     String? cleanAsset,
     this.fit = BoxFit.contain,
+    this.backgroundColor,
     this.aspectRatio = 16 / 9,
   }) : cleanAsset = cleanAsset ?? asset;
 
@@ -82,6 +82,8 @@ class PlanMedicionResolver {
 
   static List<PuntoCapturaConfig> fromPuntos(int puntos) {
     switch (puntos) {
+      case 10:
+        return _motorBomba(const [1, 2, 3, 4]).take(2).toList();
       // MOTOR + BOMBA:
       // Punto 1 -> H1/V1/A1, Punto 2 -> H2/V2/A2,
       // Punto 3 -> H5/V5/A5, Punto 4 -> H6/V6/A6.
@@ -185,16 +187,20 @@ class PlanMedicionResolver {
             puntoDb: 4,
             nombre: 'Caja multiplicadora - lado alta (caja-bomba)',
           ),
+          // La columna 5 es SIEMPRE el lado acople de la bomba y la 6 el lado
+          // libre, igual que en _motorBomba. El punto de pantalla y el punto
+          // visual no cambian: la ilustración _nox ya tiene el 6 en el lado
+          // libre y el 5 en el acople.
           PuntoCapturaConfig(
             puntoPantalla: 5,
             puntoVisual: 6,
-            puntoDb: 5,
+            puntoDb: 6,
             nombre: 'Bomba - lado libre',
           ),
           PuntoCapturaConfig(
             puntoPantalla: 6,
             puntoVisual: 5,
-            puntoDb: 6,
+            puntoDb: 5,
             nombre: 'Bomba - lado acople',
           ),
         ];
@@ -241,6 +247,10 @@ class EquipoVisualResolver {
     // La imagen y puntos salen DIRECTAMENTE de MOT_EQUIP.PUNTOS.
     // No se decide por nombre, sistema, tag, cantidad de puntos ni LC_EQ.
     // Si ves una imagen incorrecta, corrige PUNTOS en MariaDB y refresca catálogo.
+    // Antes que PUNTOS: un compresor llega con PUNTOS = 0 y caeria en el
+    // fallback de motor-bomba, que es justo lo que no es.
+    if (equipo.codeSys == codeSysAireComprimido) return _compresor;
+
     final config = _fromPtEq(equipo.ptEq);
     if (config != null) return config;
 
@@ -248,7 +258,31 @@ class EquipoVisualResolver {
     return _bombaGeneral;
   }
 
+  /// Sistema AIRE COMPRIMIDO en MOT_SYSTEM.
+  static const codeSysAireComprimido = 9;
+
+  /// Foto de las tarjetas del catálogo, independiente de los servicios,
+  /// impresión y QR que también consumen [previewFromEquipo].
+  static EquipoVisualConfig catalogFromEquipo(Equipo equipo) {
+    if (equipo.ptEq == 10) return _centrifugadoraCatalogo;
+    return previewFromEquipo(equipo);
+  }
+
+  static const _centrifugadoraCatalogo = EquipoVisualConfig(
+    id: 'centrifugadora_catalogo',
+    nombre: 'Separador de combustible',
+    asset: 'assets/images/visual_centrifugadora.jpg',
+    aspectRatio: 1376 / 768,
+    // Llena la tarjeta sin franjas ni relleno, conservando las proporciones.
+    fit: BoxFit.cover,
+    backgroundColor: Color(0xFF061A20),
+    puntos: [],
+  );
+
   static EquipoVisualConfig previewFromEquipo(Equipo equipo) {
+    if (equipo.ptEq == 10) return _separadorMotor;
+    if (equipo.codeSys == codeSysAireComprimido) return _compresor;
+
     final n = _norm(equipo.equipo);
     final lc = equipo.localizacion;
 
@@ -284,6 +318,13 @@ class EquipoVisualResolver {
     18,
   };
 
+  /// Configuracion de un tipo 1..9, o null si el numero no es uno de ellos.
+  ///
+  /// Publica para que el registro de un equipo nuevo pueda mostrar la foto y el
+  /// nombre de cada tipo al elegirlo: sin verlos, el tipo se elige a ciegas y
+  /// de el dependen la imagen de medicion y el plan de puntos.
+  static EquipoVisualConfig? porTipo(int ptEq) => _fromPtEq(ptEq);
+
   static EquipoVisualConfig? _fromPtEq(int ptEq) {
     switch (ptEq) {
       case 1:
@@ -304,10 +345,33 @@ class EquipoVisualResolver {
         return _sprint; // PDF pagina 28
       case 9:
         return _starterHidraulico; // PDF pagina 30
+      case 10:
+        return _separadorMotor;
       default:
         return null;
     }
   }
+
+  static const _separadorMotor = EquipoVisualConfig(
+    id: 'separador_motor',
+    nombre: 'Motor del separador de combustible',
+    asset: 'assets/images/visual_separador_motor.jpg',
+    aspectRatio: 1376 / 768,
+    puntos: [
+      PuntoVisual(
+          punto: 1,
+          x: 0.280,
+          y: 0.489,
+          nombre: 'Motor - lado libre',
+          asset: 'assets/images/visual_separador_motor.jpg'),
+      PuntoVisual(
+          punto: 2,
+          x: 0.580,
+          y: 0.592,
+          nombre: 'Motor - lado acople',
+          asset: 'assets/images/visual_separador_motor.jpg'),
+    ],
+  );
 
   static String _norm(String value) {
     return value
@@ -334,6 +398,24 @@ class EquipoVisualResolver {
     }
     return false;
   }
+
+  /// Compresor de aire.
+  ///
+  /// No tiene puntos de medicion: a estos equipos no se les toma vibracion,
+  /// solo se les llena la planilla SF-OP-FOR-040. La configuracion existe
+  /// unicamente para que la tarjeta muestre su foto en vez de la de una bomba,
+  /// que es donde caia por el fallback de PUNTOS = 0.
+  static const EquipoVisualConfig _compresor = EquipoVisualConfig(
+    id: 'compresor',
+    asset: 'assets/images/visual_compresor.jpg',
+    cleanAsset: 'assets/images/visual_compresor.jpg',
+    nombre: 'Compresor de aire',
+    // La foto llena la tarjeta en vez de dejar franjas grises a los lados,
+    // porque es una fotografia real y no un render recortado como las demas.
+    fit: BoxFit.cover,
+    aspectRatio: 1200 / 675,
+    puntos: [],
+  );
 
   static const EquipoVisualConfig _bombaGeneral = EquipoVisualConfig(
     id: 'bomba_general',
@@ -645,18 +727,6 @@ class EquipoVisualResolver {
   );
 }
 
-OrientacionMedicion orientacionFromEje(String eje) {
-  switch (eje.toUpperCase()) {
-    case 'V':
-      return OrientacionMedicion.vertical;
-    case 'A':
-      return OrientacionMedicion.axial;
-    case 'H':
-    default:
-      return OrientacionMedicion.horizontal;
-  }
-}
-
 String nombreOrientacion(String eje) {
   switch (eje.toUpperCase()) {
     case 'H':
@@ -671,19 +741,6 @@ String nombreOrientacion(String eje) {
 }
 
 String ejeCorto(String eje) => eje.toUpperCase();
-
-Color colorOrientacion(String eje) {
-  switch (eje.toUpperCase()) {
-    case 'H':
-      return Colors.black;
-    case 'V':
-      return const Color(0xFFE8E8E8);
-    case 'A':
-      return const Color(0xFFD50000);
-    default:
-      return const Color(0xFF0A1C3E);
-  }
-}
 
 Color colorOrientacionUi(String eje) {
   switch (eje.toUpperCase()) {

@@ -9,10 +9,15 @@ import Api_scv_ptbg as api
 
 
 class FakeCursor:
-    def __init__(self, rows=None):
+    def __init__(self, rows=None, uuid_row=None):
         self.rows = list(rows or [])
+        # La deduplicacion por UUID es una consulta aparte de la de
+        # localizacion+fecha+hora. Sin separarlas, el fake devolveria la fila
+        # preparada para la segunda y todo pareceria un reintento.
+        self.uuid_row = uuid_row
         self.calls = []
         self.lastrowid = 77
+        self._ultima_por_uuid = False
 
     def __enter__(self):
         return self
@@ -21,18 +26,22 @@ class FakeCursor:
         return False
 
     def execute(self, sql, params=None):
-        self.calls.append((" ".join(sql.split()), params))
+        normalizada = " ".join(sql.split())
+        self.calls.append((normalizada, params))
+        self._ultima_por_uuid = "WHERE UUID = %s" in normalizada
 
     def fetchall(self):
         return list(self.rows)
 
     def fetchone(self):
+        if self._ultima_por_uuid:
+            return self.uuid_row
         return self.rows[0] if self.rows else None
 
 
 class FakeConnection:
-    def __init__(self, rows=None):
-        self.cursor_instance = FakeCursor(rows)
+    def __init__(self, rows=None, uuid_row=None):
+        self.cursor_instance = FakeCursor(rows, uuid_row=uuid_row)
         self.committed = False
         self.rolled_back = False
         self.closed = False
@@ -90,14 +99,17 @@ class TemperatureApiTests(unittest.TestCase):
         sql, params = db.cursor_instance.calls[-1]
         self.assertIn("INSERT INTO MOT_TEMP_MUES", sql)
         expected_columns = (
-            "FECHA,HORA,SISTEMA,LOCALIZACION,T1,T2,T3,T4,T5,T6,T7,T8,T9,T10,"
+            "UUID,FECHA,HORA,SISTEMA,LOCALIZACION,T1,T2,T3,T4,T5,T6,T7,T8,T9,T10,"
             "OBSERVACIONES,USUARIO,CARGO,MARCA,MODELO,SERIAL,ODT"
         )
         self.assertIn(expected_columns, sql.replace(" ", ""))
-        self.assertEqual("2026-07-22", params[0])
-        self.assertEqual(41.5, params[4])
-        self.assertEqual(0.0, params[5])
-        self.assertEqual(55.25, params[13])
+        # UUID va primero: identifica la medicion para que un reintento no la
+        # duplique. El resto de los valores corre una posicion.
+        self.assertEqual("temp-1", params[0])
+        self.assertEqual("2026-07-22", params[1])
+        self.assertEqual(41.5, params[5])
+        self.assertEqual(0.0, params[6])
+        self.assertEqual(55.25, params[14])
         self.assertIsNone(params[-1])
         self.assertTrue(db.committed)
         self.assertEqual({"status": "ok", "uuid": "temp-1", "id": 77}, result)
@@ -130,8 +142,11 @@ class TemperatureApiTests(unittest.TestCase):
         self.assertEqual("skipped", result["status"])
         self.assertEqual("already_exists", result["reason"])
         self.assertEqual(55, result["id"])
-        self.assertEqual(1, len(db.cursor_instance.calls))
-        sql, params = db.cursor_instance.calls[0]
+        # +1 consulta: la deduplicacion por UUID va antes que la de fecha/hora.
+        self.assertEqual(2, len(db.cursor_instance.calls))
+        sql, params = next(
+            c for c in db.cursor_instance.calls if "LOCALIZACION = %s" in c[0]
+        )
         self.assertIn("FROM MOT_TEMP_MUES", sql)
         self.assertIn("LOCALIZACION = %s", sql)
         self.assertIn("FECHA = %s", sql)
@@ -158,8 +173,11 @@ class TemperatureApiTests(unittest.TestCase):
 
         self.assertEqual("ok", result["status"])
         self.assertTrue(db.committed)
-        self.assertEqual(2, len(db.cursor_instance.calls))
-        insert_sql, _ = db.cursor_instance.calls[1]
+        # +1 consulta: la deduplicacion por UUID va antes que la de fecha/hora.
+        self.assertEqual(3, len(db.cursor_instance.calls))
+        insert_sql, _ = next(
+            c for c in db.cursor_instance.calls if c[0].startswith("INSERT INTO")
+        )
         self.assertIn("INSERT INTO MOT_TEMP_MUES", insert_sql)
 
     def test_latest_endpoint_orders_and_limits_in_sql(self):

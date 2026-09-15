@@ -50,7 +50,7 @@ void main() {
     });
 
     test('otros tipos no son elegibles', () {
-      for (final puntos in const [0, 3, 4, 5, 7, 8, 10]) {
+      for (final puntos in const [0, 3, 4, 5, 7, 8, 11]) {
         expect(AlignmentPlanResolver.isEligible(puntos), isFalse);
         expect(AlignmentPlanResolver.fromPuntos(puntos), isEmpty);
       }
@@ -65,11 +65,21 @@ void main() {
       expect(parseAlignmentValue(' 25,4 '), 25.4);
     });
 
-    test('rechaza punto, más de dos decimales y texto', () {
-      expect(parseAlignmentValue('0.05'), isNull);
+    test('acepta punto y coma como separador decimal', () {
+      // En campo se escribe indistintamente 0,05 o 0.05 segun el teclado que
+      // le salga al tecnico: los dos valen y significan lo mismo.
+      expect(parseAlignmentValue('0.05'), 0.05);
+      expect(parseAlignmentValue('0,05'), 0.05);
+      expect(parseAlignmentValue('-1.5'), -1.5);
+    });
+
+    test('rechaza mas de dos decimales, vacio y texto', () {
+      // Mas de dos decimales no es una lectura real del instrumento.
       expect(parseAlignmentValue('1,234'), isNull);
+      expect(parseAlignmentValue('1.234'), isNull);
       expect(parseAlignmentValue(''), isNull);
       expect(parseAlignmentValue('abc'), isNull);
+      expect(parseAlignmentValue('0,'), isNull);
     });
   });
 

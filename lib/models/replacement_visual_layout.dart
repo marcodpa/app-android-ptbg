@@ -34,6 +34,14 @@ class ReplacementVisualResolver {
 
   static ReplacementVisualLayout? fromPuntos(int puntos) {
     switch (puntos) {
+      case 10:
+        return const ReplacementVisualLayout(
+          asset: 'assets/images/visual_separador_motor.jpg',
+          aspectRatio: 1376 / 768,
+          regions: {
+            ReplacementComponent.motor: [Rect.fromLTRB(0.24, 0.10, 0.82, 0.92)]
+          },
+        );
       case 1:
         return _bombaGeneral;
       case 2:

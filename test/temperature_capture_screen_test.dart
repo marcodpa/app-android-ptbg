@@ -17,6 +17,28 @@ const _equipo = Equipo(
 );
 
 void main() {
+  testWidgets('muestra el nivel mientras se escribe, sin pulsar Siguiente',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: TemperatureCaptureScreen(
+          equipo: _equipo,
+          enableRemote: false,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const Key('temperature-value-field')),
+      '120',
+    );
+    await tester.pump();
+
+    expect(find.textContaining('Alto:'), findsOneWidget);
+    expect(find.text('T1'), findsWidgets);
+  });
+
   testWidgets('captura una temperatura en Celsius por punto', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(

@@ -1,26 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../db/db_helper.dart';
 import '../models/equipo_visual_config.dart';
+import '../models/measurement_validation.dart';
 import '../models/models.dart';
 import '../models/temperature_measurement.dart';
 import '../models/temperature_plan.dart';
 import '../services/api_service.dart';
 import '../theme.dart';
+import '../widgets/avisos.dart';
+import '../widgets/capture_summary.dart';
+import '../widgets/fecha_medicion.dart';
 import '../widgets/equipo_punto_viewer.dart';
+import '../widgets/measurement_advisory_banner.dart';
+import '../widgets/industrial_navigation.dart';
 
 class TemperatureCaptureScreen extends StatefulWidget {
   final Equipo equipo;
   final bool enableRemote;
+  final int? odt;
 
   const TemperatureCaptureScreen({
     super.key,
     required this.equipo,
     this.enableRemote = true,
+    this.odt,
   });
 
   @override
@@ -31,6 +38,7 @@ class TemperatureCaptureScreen extends StatefulWidget {
 class _TemperatureCaptureScreenState extends State<TemperatureCaptureScreen> {
   final _valueController = TextEditingController();
   final _focusNode = FocusNode();
+  final _fechaMedicion = FechaHoraMedicion();
   late final EquipoVisualConfig _visualConfig;
   late final List<TemperatureStep> _steps;
   TemperatureReading? _latest;
@@ -39,6 +47,7 @@ class _TemperatureCaptureScreenState extends State<TemperatureCaptureScreen> {
   bool _loading = true;
   bool _saving = false;
   bool _allowPop = false;
+  String? _valueError;
 
   TemperatureStep get _current => _steps[_index];
 
@@ -57,6 +66,13 @@ class _TemperatureCaptureScreenState extends State<TemperatureCaptureScreen> {
     super.dispose();
   }
 
+  /// Abre la pantalla con lo que ya esta en la tablet y consulta al servidor
+  /// despues, sin bloquear.
+  ///
+  /// Antes se esperaba la respuesta del API ANTES de dibujar: en una tablet
+  /// que trabaja por USB —sin ruta hacia el servidor de la planta— esa
+  /// llamada agota sus diez segundos siempre, y el mecanico se los comia
+  /// mirando el circulito en cada equipo que media.
   Future<void> _load() async {
     TemperatureReading? latest;
     EquipoInfo? info = widget.equipo.info;
@@ -64,19 +80,6 @@ class _TemperatureCaptureScreenState extends State<TemperatureCaptureScreen> {
       latest = await DbHelper.instance
           .getLatestTemperature(widget.equipo.localizacion);
     } catch (_) {}
-    if (widget.enableRemote) {
-      try {
-        final remote = await ApiService.instance
-            .fetchLatestTemperature(widget.equipo.localizacion);
-        if (remote != null &&
-            (latest == null || remote.fechaHora.isAfter(latest.fechaHora))) {
-          latest = remote;
-          try {
-            await DbHelper.instance.upsertLatestTemperature(remote);
-          } catch (_) {}
-        }
-      } catch (_) {}
-    }
     if (info == null || info.isEmpty) {
       try {
         info =
@@ -90,6 +93,24 @@ class _TemperatureCaptureScreenState extends State<TemperatureCaptureScreen> {
       _loading = false;
     });
     _focusLater();
+    _refrescarDesdeServidor();
+  }
+
+  /// Si hay red, trae la ultima lectura del servidor y actualiza la tarjeta
+  /// de "anterior" cuando llegue. Si no hay, no se entera nadie.
+  Future<void> _refrescarDesdeServidor() async {
+    if (!widget.enableRemote) return;
+    try {
+      final remote = await ApiService.instance
+          .fetchLatestTemperature(widget.equipo.localizacion);
+      if (remote == null) return;
+      final actual = _latest;
+      if (actual != null && !remote.fechaHora.isAfter(actual.fechaHora)) return;
+      try {
+        await DbHelper.instance.upsertLatestTemperature(remote);
+      } catch (_) {}
+      if (mounted) setState(() => _latest = remote);
+    } catch (_) {}
   }
 
   void _focusLater() {
@@ -101,16 +122,16 @@ class _TemperatureCaptureScreenState extends State<TemperatureCaptureScreen> {
   }
 
   bool _saveCurrent({required bool requiredValue}) {
-    final value = parseTemperature(_valueController.text);
-    if (requiredValue && value == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Ingrese la temperatura en °C antes de continuar.'),
-          backgroundColor: AppColors.warning,
-        ),
-      );
+    final error = requiredValue
+        ? MeasurementValidation.requiredNumber(_valueController.text)
+        : null;
+    if (error != null) {
+      setState(() => _valueError = error);
+      avisar(context, error, AppColors.warning);
       return false;
     }
+    final value = MeasurementValidation.parseDecimal(_valueController.text);
+    if (_valueError != null) setState(() => _valueError = null);
     _current.value = value;
     return true;
   }
@@ -150,26 +171,14 @@ class _TemperatureCaptureScreenState extends State<TemperatureCaptureScreen> {
 
   Future<bool> _confirmExit() async {
     if (!_hasProgress) return true;
-    return await showDialog<bool>(
-          context: context,
-          builder: (dialogContext) => AlertDialog(
-            title: const Text('Salir de la medición'),
-            content: const Text(
-              'La medición no está terminada. Se perderán los valores capturados.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext, false),
-                child: const Text('Cancelar'),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(dialogContext, true),
-                child: const Text('Salir'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
+    return confirmar(
+      context,
+      titulo: 'Salir de la medición',
+      mensaje:
+          'La medición no está terminada. Se perderán los valores capturados.',
+      textoConfirmar: 'SALIR',
+      destructivo: true,
+    );
   }
 
   Future<void> _askObservation() async {
@@ -179,12 +188,40 @@ class _TemperatureCaptureScreenState extends State<TemperatureCaptureScreen> {
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Observación general'),
-        content: TextField(
-          autofocus: true,
-          maxLines: 4,
-          onChanged: (value) => observation = value.trim(),
-          decoration: const InputDecoration(
-            hintText: 'Observación de la muestra de temperatura',
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Ver la temperatura de cada punto mientras escribe es lo que
+                // le hace recordar que encontro en cada uno.
+                CaptureSummary(
+                  headers: const ['Temperatura'],
+                  rows: [
+                    for (final step in _steps)
+                      CaptureSummaryRow(
+                        numero: '${step.pointNumber}',
+                        nombre: step.label,
+                        valores: [CaptureSummary.formatear(step.value)],
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  autofocus: true,
+                  maxLines: 4,
+                  onChanged: (value) => observation = value.trim(),
+                  decoration: const InputDecoration(
+                    hintText: 'Observación de la muestra de temperatura',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Para la medicion hecha antes sin la tablet a mano.
+                SelectorFechaMedicion(valor: _fechaMedicion),
+              ],
+            ),
           ),
         ),
         actions: [
@@ -214,7 +251,6 @@ class _TemperatureCaptureScreenState extends State<TemperatureCaptureScreen> {
     if (_saving) return;
     setState(() => _saving = true);
     FocusScope.of(context).unfocus();
-    final now = DateTime.now();
     var responsable = '';
     var cargo = '';
     try {
@@ -231,8 +267,8 @@ class _TemperatureCaptureScreenState extends State<TemperatureCaptureScreen> {
       uuid: const Uuid().v4(),
       localizacion: widget.equipo.localizacion,
       sistema: widget.equipo.sistema,
-      fecha: DateFormat('yyyy-MM-dd').format(now),
-      hora: DateFormat('HH:mm:ss').format(now),
+      fecha: _fechaMedicion.fecha,
+      hora: _fechaMedicion.hora,
       valores: values,
       observaciones: observation.trim(),
       responsable: responsable,
@@ -240,39 +276,31 @@ class _TemperatureCaptureScreenState extends State<TemperatureCaptureScreen> {
       marca: (_info ?? widget.equipo.info)?.marca,
       modelo: (_info ?? widget.equipo.info)?.modelo,
       serial: (_info ?? widget.equipo.info)?.serial,
+      odt: widget.odt,
     );
     try {
       await DbHelper.instance.insertTemperature(measurement);
+      await _fechaMedicion.registrarSiManual(
+        servicio: 'temperatura',
+        localizacion: widget.equipo.localizacion,
+        uuid: measurement.uuid,
+      );
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('No se pudo guardar localmente: $error'),
-            backgroundColor: AppColors.error,
-          ),
-        );
+        avisar(context, 'No se pudo guardar localmente: $error',
+            AppColors.error);
         setState(() => _saving = false);
       }
       return;
     }
     if (!mounted) return;
     setState(() => _saving = false);
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Temperatura guardada'),
-        content: const Text(
+    await avisarGuardado(
+      context,
+      titulo: 'Temperatura guardada',
+      mensaje:
           'La medición quedó guardada en la tablet para sincronizarla después '
           'desde el apartado Sincronización.',
-        ),
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cerrar'),
-          ),
-        ],
-      ),
     );
     if (mounted) Navigator.pop(context, true);
   }
@@ -297,14 +325,12 @@ class _TemperatureCaptureScreenState extends State<TemperatureCaptureScreen> {
       },
       child: Scaffold(
         backgroundColor: AppColors.bg,
-        appBar: AppBar(
-          backgroundColor: AppColors.headerTop,
-          foregroundColor: Colors.white,
+        appBar: IndustrialAppBar(
+          titulo: 'Medición de temperatura',
           leading: IconButton(
             onPressed: _back,
             icon: const Icon(Icons.arrow_back_rounded),
           ),
-          title: const Text('Medición de temperatura'),
         ),
         body: SafeArea(
           child: Column(
@@ -315,7 +341,7 @@ class _TemperatureCaptureScreenState extends State<TemperatureCaptureScreen> {
                   children: [
                     Text(
                       'Paso ${_index + 1}/${_steps.length}',
-                      style: const TextStyle(fontWeight: FontWeight.w800),
+                      style: AppText.cuerpoFuerte,
                     ),
                     const SizedBox(width: 12),
                     Expanded(child: LinearProgressIndicator(value: progress)),
@@ -355,10 +381,7 @@ class _TemperatureCaptureScreenState extends State<TemperatureCaptureScreen> {
                     children: [
                       Text(
                         _current.label,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                        ),
+                        style: AppText.titulo,
                       ),
                       const SizedBox(height: 6),
                       Text(
@@ -368,6 +391,14 @@ class _TemperatureCaptureScreenState extends State<TemperatureCaptureScreen> {
                         style: const TextStyle(color: AppColors.textSecondary),
                       ),
                       const SizedBox(height: 12),
+                      MeasurementAdvisoryBanner(
+                        advisory: MeasurementAdvisory.temperature(
+                          MeasurementValidation.parseDecimal(
+                            _valueController.text,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 5),
                       TextField(
                         key: const Key('temperature-value-field'),
                         controller: _valueController,
@@ -376,12 +407,19 @@ class _TemperatureCaptureScreenState extends State<TemperatureCaptureScreen> {
                           decimal: true,
                           signed: true,
                         ),
+                        inputFormatters: [
+                          MeasurementValidation.decimalFormatter(signed: true),
+                        ],
+                        onChanged: (_) {
+                          setState(() => _valueError = null);
+                        },
                         textInputAction: TextInputAction.next,
                         onSubmitted: (_) => _next(),
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: 'Temperatura',
                           suffixText: '°C',
-                          prefixIcon: Icon(Icons.thermostat_rounded),
+                          prefixIcon: const Icon(Icons.thermostat_rounded),
+                          errorText: _valueError,
                         ),
                       ),
                       const SizedBox(height: 14),

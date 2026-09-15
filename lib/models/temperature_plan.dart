@@ -19,6 +19,8 @@ class TemperatureStep {
 class TemperaturePlanResolver {
   static List<TemperatureStep> fromPuntos(int puntos) {
     switch (puntos) {
+      case 10:
+        return _motorPump(const [1, 2, 3, 4]).take(2).toList();
       case 2:
         return _motorPump(const [4, 3, 1, 2]);
       case 3:

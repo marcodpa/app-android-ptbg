@@ -1,11 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../models/models.dart';
 import '../models/operation_flow.dart';
 import '../models/replacement_request.dart';
+import '../models/compatibilidad_equipos.dart';
+import '../models/component_catalog.dart';
 import '../db/db_helper.dart';
+import '../services/api_service.dart';
 import '../theme.dart';
 import '../widgets/replacement_focus_image.dart';
+import '../widgets/industrial_navigation.dart';
+import '../widgets/avisos.dart';
 
 typedef ReplacementSaver = Future<ReplacementSaveResult> Function(
   ReplacementRequest request,
@@ -16,10 +23,12 @@ class ReplacementScreen extends StatefulWidget {
     super.key,
     required this.equipo,
     this.saveReplacement,
+    this.odt,
   });
 
   final Equipo equipo;
   final ReplacementSaver? saveReplacement;
+  final int? odt;
 
   @override
   State<ReplacementScreen> createState() => _ReplacementScreenState();
@@ -32,6 +41,7 @@ class _ReplacementScreenState extends State<ReplacementScreen> {
       component: _ReplacementFields(),
   };
   final Set<ReplacementComponent> _selected = <ReplacementComponent>{};
+  final Set<ReplacementComponent> _loadingCatalog = <ReplacementComponent>{};
 
   late final List<ReplacementComponent> _available;
   bool _updateMotorTechnicalSpecs = false;
@@ -54,6 +64,145 @@ class _ReplacementScreenState extends State<ReplacementScreen> {
   }
 
   bool get _hasChanges => _selected.isNotEmpty;
+
+  /// Piezas ya registradas de ese tipo.
+  ///
+  /// El catalogo baja entero por USB en cada sincronizacion, asi que la copia
+  /// local es la fuente de verdad en campo. Si ya hay datos se devuelven de
+  /// inmediato y el refresco por red se hace aparte: hacer esperar un timeout
+  /// de red al mecanico que esta sin señal no aporta nada.
+  Future<List<ComponentCatalogItem>> _loadCatalog(
+    ReplacementComponent component,
+  ) async {
+    final tipo = replacementComponentCode(component);
+    final cached = await DbHelper.instance.getComponentCatalog(tipo);
+    final local =
+        cached.map(ComponentCatalogItem.fromLocalMap).toList(growable: false);
+
+    if (local.isNotEmpty) {
+      unawaited(_refrescarCatalogo(tipo));
+      return local;
+    }
+
+    // Sin copia local si que vale la pena intentar la red: es la unica opcion.
+    try {
+      final fresh = await ApiService.instance.fetchComponentCatalog(tipo);
+      await DbHelper.instance.saveComponentCatalog(
+        tipo,
+        fresh.map((item) => item.toLocalMap()).toList(),
+      );
+      return fresh;
+    } catch (_) {
+      return local;
+    }
+  }
+
+  Future<void> _refrescarCatalogo(int tipo) async {
+    try {
+      final fresh = await ApiService.instance.fetchComponentCatalog(tipo);
+      await DbHelper.instance.saveComponentCatalog(
+        tipo,
+        fresh.map((item) => item.toLocalMap()).toList(),
+      );
+    } catch (_) {
+      // Sin señal en campo es lo normal: sigue valiendo lo que bajo por USB.
+    }
+  }
+
+  Future<void> _pickRegistered(ReplacementComponent component) async {
+    setState(() => _loadingCatalog.add(component));
+    final List<ComponentCatalogItem> todas;
+    try {
+      todas = await _loadCatalog(component);
+    } finally {
+      if (mounted) setState(() => _loadingCatalog.remove(component));
+    }
+    if (!mounted) return;
+
+    if (todas.isEmpty) {
+      avisar(
+        context,
+        'El catálogo aún no se ha descargado. Sincroniza la tablet por USB. '
+        'Mientras tanto puedes escribir los datos abajo.',
+        AppColors.warning,
+        duracion: const Duration(seconds: 5),
+      );
+      return;
+    }
+
+    // Solo las piezas de la misma familia que este equipo. Un motor de un
+    // FIN FAN no sirve en una bomba de patin, y ofrecerselo al mecanico es
+    // invitarlo a montar algo que no encaja.
+    final destino = widget.equipo.localizacion;
+    final items = todas
+        .where((pieza) => CompatibilidadEquipos.compatible(
+              origen: pieza.localizacion,
+              destino: destino,
+            ))
+        .toList();
+
+    if (items.isEmpty) {
+      avisar(
+        context,
+        'No hay ${replacementComponentLabel(component).toLowerCase()} '
+        'compatible con ${CompatibilidadEquipos.nombreFamilia(destino)}. '
+        'De ${todas.length} registradas, ninguna sirve para este equipo.',
+        AppColors.warning,
+        duracion: const Duration(seconds: 6),
+      );
+      return;
+    }
+
+    final chosen = await showModalBottomSheet<ComponentCatalogItem>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _CatalogPicker(
+        titulo: replacementComponentLabel(component),
+        items: items,
+      ),
+    );
+    if (chosen == null || !mounted) return;
+
+    // La pieza sigue montada en otro equipo. No se bloquea, se avisa: puede ser
+    // un traslado real que aun no se ha registrado alla.
+    if (chosen.instalado) {
+      final donde = (chosen.equipo ?? '').trim().isEmpty
+          ? 'el equipo ${chosen.localizacion ?? '?'}'
+          : '${chosen.equipo} (loc. ${chosen.localizacion ?? '?'})';
+      final confirmar = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: AppColors.surface,
+          title: const Text('Esta pieza está instalada'),
+          content: Text(
+            'El serial ${chosen.serial} figura montado en $donde.\n\n'
+            'Si la usas aquí, quedará registrada en los dos equipos hasta que '
+            'alguien registre el reemplazo en el otro.',
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('CANCELAR')),
+            FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('USARLA IGUAL')),
+          ],
+        ),
+      );
+      if (confirmar != true || !mounted) return;
+    }
+
+    final fields = _fields[component]!;
+    setState(() {
+      fields.brand.text = chosen.marca;
+      fields.model.text = chosen.modelo;
+      fields.serial.text = chosen.serial;
+    });
+  }
 
   Future<bool> _confirmExit() async {
     if (!_hasChanges || _finishing) return true;
@@ -146,6 +295,7 @@ class _ReplacementScreenState extends State<ReplacementScreen> {
                 _updateMotorTechnicalSpecs,
           ),
       },
+      odt: widget.odt,
     );
 
     final saver = widget.saveReplacement ?? _saveLocally;
@@ -216,12 +366,10 @@ class _ReplacementScreenState extends State<ReplacementScreen> {
       },
       child: Scaffold(
         backgroundColor: AppColors.bg,
-        appBar: AppBar(
-          backgroundColor: AppColors.headerTop,
-          foregroundColor: Colors.white,
-          title: Text(_reviewing ? 'Revisar reemplazo' : 'Reemplazo de equipo'),
+        appBar: IndustrialAppBar(
+          titulo: _reviewing ? 'Revisar reemplazo' : 'Reemplazo de equipo',
           leading: IconButton(
-            tooltip: 'Atras',
+            tooltip: 'Atrás',
             icon: const Icon(Icons.arrow_back_rounded),
             onPressed: () async {
               if (_reviewing) {
@@ -251,13 +399,9 @@ class _ReplacementScreenState extends State<ReplacementScreen> {
             const Icon(Icons.info_outline_rounded,
                 size: 48, color: AppColors.warning),
             const SizedBox(height: 14),
-            const Text(
+            Text(
               'Composicion no configurada',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                color: AppColors.textPrimary,
-              ),
+              style: AppText.titulo.copyWith(color: AppColors.textPrimary),
             ),
             const SizedBox(height: 8),
             Text(
@@ -287,21 +431,15 @@ class _ReplacementScreenState extends State<ReplacementScreen> {
                   selected: _selected,
                 ),
                 const SizedBox(height: 20),
-                const Text(
+                Text(
                   'Que componente se reemplazo?',
-                  style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 19,
-                    fontWeight: FontWeight.w800,
-                  ),
+                  style: AppText.titulo.copyWith(color: AppColors.textPrimary),
                 ),
                 const SizedBox(height: 6),
-                const Text(
+                Text(
                   'Selecciona uno o varios componentes e ingresa sus datos nuevos.',
-                  style: TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 13,
-                  ),
+                  style: AppText.subtitulo
+                      .copyWith(color: AppColors.textSecondary),
                 ),
                 const SizedBox(height: 16),
                 for (final component in _available) ...[
@@ -335,14 +473,17 @@ class _ReplacementScreenState extends State<ReplacementScreen> {
     final slug = component.name;
     final fields = _fields[component]!;
 
+    final loading = _loadingCatalog.contains(component);
+
     return Container(
       decoration: BoxDecoration(
-        color: selected ? AppColors.tealLight : AppColors.surface,
-        borderRadius: BorderRadius.circular(8),
+        color: selected ? AppColors.surface2 : AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: selected ? AppColors.teal : AppColors.border,
-          width: selected ? 2 : 1,
+          width: selected ? 1.6 : 1,
         ),
+        boxShadow: selected ? AppColors.shadowSm : null,
       ),
       child: Column(
         children: [
@@ -350,28 +491,63 @@ class _ReplacementScreenState extends State<ReplacementScreen> {
             color: Colors.transparent,
             child: InkWell(
               key: Key('component-$slug'),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(16),
               onTap: () => _toggleComponent(component),
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(14),
                 child: Row(
                   children: [
-                    Icon(_componentIcon(component),
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
                         color: selected
-                            ? AppColors.tealDark
-                            : AppColors.headerTop),
+                            ? AppColors.teal.withValues(alpha: .16)
+                            : AppColors.bg2,
+                        borderRadius: BorderRadius.circular(13),
+                        border: Border.all(
+                          color: selected
+                              ? AppColors.teal.withValues(alpha: .40)
+                              : AppColors.borderDark,
+                        ),
+                      ),
+                      child: Icon(
+                        _componentIcon(component),
+                        size: 22,
+                        color: selected
+                            ? AppColors.teal
+                            : AppColors.textSecondary,
+                      ),
+                    ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: Text(name,
-                          style: const TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800)),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(name,
+                              style: AppText.seccion
+                                  .copyWith(color: AppColors.textPrimary)),
+                          const SizedBox(height: 2),
+                          Text(
+                            _estadoComponente(component, fields),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppText.subtitulo.copyWith(
+                              color: !selected
+                                  ? AppColors.textHint
+                                  : (fields.completo
+                                      ? AppColors.teal
+                                      : AppColors.warning),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
+                    const SizedBox(width: 8),
                     Icon(
                       selected
-                          ? Icons.check_box_rounded
-                          : Icons.check_box_outline_blank_rounded,
+                          ? Icons.check_circle_rounded
+                          : Icons.radio_button_unchecked_rounded,
                       color: selected ? AppColors.teal : AppColors.borderDark,
                     ),
                   ],
@@ -379,16 +555,48 @@ class _ReplacementScreenState extends State<ReplacementScreen> {
               ),
             ),
           ),
-          if (selected)
+          if (selected) ...[
+            const Divider(height: 1, color: AppColors.border),
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
               child: Column(
                 children: [
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.tonalIcon(
+                      key: Key('pick-registered-$slug'),
+                      onPressed:
+                          loading ? null : () => _pickRegistered(component),
+                      icon: loading
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child:
+                                  CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.inventory_2_outlined, size: 19),
+                      label: Text(loading
+                          ? 'Buscando piezas...'
+                          : 'Elegir una ya registrada'),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(children: [
+                    const Expanded(child: Divider(color: AppColors.border)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      child: Text('o registra una nueva',
+                          style: AppText.etiqueta
+                              .copyWith(color: AppColors.textHint)),
+                    ),
+                    const Expanded(child: Divider(color: AppColors.border)),
+                  ]),
+                  const SizedBox(height: 14),
                   TextFormField(
                     key: Key('brand-$slug'),
                     controller: fields.brand,
                     textCapitalization: TextCapitalization.characters,
                     decoration: const InputDecoration(labelText: 'Marca'),
+                    onChanged: (_) => setState(() {}),
                     validator: (value) => _required(value, 'Ingresa la marca'),
                   ),
                   const SizedBox(height: 10),
@@ -397,6 +605,7 @@ class _ReplacementScreenState extends State<ReplacementScreen> {
                     controller: fields.model,
                     textCapitalization: TextCapitalization.characters,
                     decoration: const InputDecoration(labelText: 'Modelo'),
+                    onChanged: (_) => setState(() {}),
                     validator: (value) => _required(value, 'Ingresa el modelo'),
                   ),
                   const SizedBox(height: 10),
@@ -405,24 +614,84 @@ class _ReplacementScreenState extends State<ReplacementScreen> {
                     controller: fields.serial,
                     textCapitalization: TextCapitalization.characters,
                     decoration: const InputDecoration(labelText: 'Serial'),
+                    onChanged: (_) => setState(() {}),
                     validator: (value) => _required(value, 'Ingresa el serial'),
+                  ),
+                  const SizedBox(height: 10),
+                  const SizedBox(height: 16),
+                  Row(children: [
+                    const Expanded(child: Divider(color: AppColors.border)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      child: Text('la pieza que sale',
+                          style: AppText.etiqueta
+                              .copyWith(color: AppColors.textHint)),
+                    ),
+                    const Expanded(child: Divider(color: AppColors.border)),
+                  ]),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    key: Key('motivo-$slug'),
+                    initialValue: fields.motivo,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Que se dano? (opcional)',
+                      prefixIcon: Icon(Icons.build_circle_outlined, size: 20),
+                    ),
+                    items: [
+                      for (final dano in danosReemplazo)
+                        DropdownMenuItem(value: dano, child: Text(dano)),
+                    ],
+                    onChanged: (value) =>
+                        setState(() => fields.motivo = value),
+                  ),
+                  const SizedBox(height: 10),
+                  // El estatus de la pieza retirada lo decide el tecnico: solo
+                  // el sabe si sirve, quedo averiada o se desecha.
+                  DropdownButtonFormField<String>(
+                    key: Key('estado-saliente-$slug'),
+                    initialValue: fields.estadoSaliente,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Como queda la pieza retirada',
+                      prefixIcon: Icon(Icons.inventory_rounded, size: 20),
+                    ),
+                    items: [
+                      for (final estado in estadosPieza)
+                        DropdownMenuItem(value: estado, child: Text(estado)),
+                    ],
+                    onChanged: (value) =>
+                        setState(() => fields.estadoSaliente = value),
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    key: Key('sitio-saliente-$slug'),
+                    initialValue: fields.sitioSaliente,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'A donde va',
+                      prefixIcon: Icon(Icons.warehouse_rounded, size: 20),
+                    ),
+                    items: [
+                      for (final sitio in sitiosPieza)
+                        DropdownMenuItem(value: sitio, child: Text(sitio)),
+                    ],
+                    onChanged: (value) =>
+                        setState(() => fields.sitioSaliente = value),
                   ),
                   if (component == ReplacementComponent.motor) ...[
                     const SizedBox(height: 18),
-                    const Divider(),
+                    const Divider(color: AppColors.border),
                     const SizedBox(height: 8),
                     Material(
                       color: Colors.transparent,
                       child: SwitchListTile(
                         key: const Key('update-motor-technical-specs'),
                         contentPadding: EdgeInsets.zero,
-                        title: const Text(
+                        title: Text(
                           'Cambiar especificaciones tecnicas',
-                          style: TextStyle(
-                            color: AppColors.headerTop,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                          ),
+                          style: AppText.seccion
+                              .copyWith(color: AppColors.textPrimary),
                         ),
                         value: _updateMotorTechnicalSpecs,
                         activeThumbColor: AppColors.teal,
@@ -432,14 +701,12 @@ class _ReplacementScreenState extends State<ReplacementScreen> {
                       ),
                     ),
                     if (!_updateMotorTechnicalSpecs)
-                      const Align(
+                      Align(
                         alignment: Alignment.centerLeft,
                         child: Text(
                           'Se conservaran las especificaciones actuales',
-                          style: TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 12,
-                          ),
+                          style: AppText.apoyo
+                              .copyWith(color: AppColors.textSecondary),
                         ),
                       ),
                     if (_updateMotorTechnicalSpecs) ...[
@@ -450,9 +717,25 @@ class _ReplacementScreenState extends State<ReplacementScreen> {
                 ],
               ),
             ),
+          ],
         ],
       ),
     );
+  }
+
+  /// Linea de estado bajo el nombre del componente en la tarjeta.
+  String _estadoComponente(
+    ReplacementComponent component,
+    _ReplacementFields fields,
+  ) {
+    if (!_selected.contains(component)) return 'Sin reemplazo';
+    if (!fields.completo) return 'Faltan datos';
+    final resumen = [
+      fields.brand.text.trim(),
+      fields.model.text.trim(),
+      fields.serial.text.trim(),
+    ].join(' · ');
+    return fields.motivo == null ? resumen : '$resumen · ${fields.motivo}';
   }
 
   Widget _reviewBody() {
@@ -472,22 +755,20 @@ class _ReplacementScreenState extends State<ReplacementScreen> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppColors.warningBg,
+                  color: AppColors.warning.withValues(alpha: .12),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: AppColors.warning),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    Icon(Icons.storage_outlined, color: AppColors.warning),
-                    SizedBox(width: 10),
+                    const Icon(Icons.storage_outlined,
+                        color: AppColors.warning),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         'Verifica cuidadosamente los datos. Al completar se archivara el equipo anterior y se actualizara el equipo en servicio.',
-                        style: TextStyle(
-                          color: AppColors.textPrimary,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style:
+                            AppText.apoyo.copyWith(color: AppColors.warning),
                       ),
                     ),
                   ],
@@ -556,11 +837,7 @@ class _ReplacementScreenState extends State<ReplacementScreen> {
               const SizedBox(width: 10),
               Text(
                 _componentLabel(component),
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                ),
+                style: AppText.seccion.copyWith(color: AppColors.textPrimary),
               ),
             ],
           ),
@@ -586,13 +863,9 @@ class _ReplacementScreenState extends State<ReplacementScreen> {
             _reviewRow('Lubricacion', fields.lubrication.text.trim()),
           ] else if (component == ReplacementComponent.motor) ...[
             const Divider(height: 20),
-            const Text(
+            Text(
               'Las especificaciones tecnicas actuales se conservaran.',
-              style: TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
+              style: AppText.apoyo.copyWith(color: AppColors.textSecondary),
             ),
           ],
         ],
@@ -650,20 +923,19 @@ class _ReplacementScreenState extends State<ReplacementScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(widget.equipo.equipo,
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800)),
+              style: AppText.titulo.copyWith(color: Colors.white)),
           const SizedBox(height: 5),
           Text(
             '${widget.equipo.sistema}  |  LOC ${widget.equipo.localizacion}',
-            style: const TextStyle(color: Color(0xFFB8C7DE), fontSize: 12),
+            style:
+                AppText.subtitulo.copyWith(color: const Color(0xFFB8C7DE)),
           ),
           if ((widget.equipo.qrCode ?? '').trim().isNotEmpty) ...[
             const SizedBox(height: 3),
             Text(
               'QR ${widget.equipo.qrCode}',
-              style: const TextStyle(color: Color(0xFFB8C7DE), fontSize: 12),
+              style:
+                  AppText.subtitulo.copyWith(color: const Color(0xFFB8C7DE)),
             ),
           ],
         ],
@@ -680,15 +952,13 @@ class _ReplacementScreenState extends State<ReplacementScreen> {
           SizedBox(
             width: 110,
             child: Text(label,
-                style: const TextStyle(
-                    color: AppColors.textSecondary, fontSize: 12)),
+                style: AppText.etiqueta
+                    .copyWith(color: AppColors.textSecondary)),
           ),
           Expanded(
             child: Text(value,
-                style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700)),
+                style: AppText.cuerpoFuerte
+                    .copyWith(color: AppColors.textPrimary)),
           ),
         ],
       ),
@@ -740,6 +1010,127 @@ class _ReplacementScreenState extends State<ReplacementScreen> {
   }
 }
 
+/// Lista de piezas registradas, con buscador.
+///
+/// Las disponibles van primero; las que siguen montadas en otro equipo se
+/// muestran igual pero marcadas, porque puede tratarse de un traslado que aun
+/// no se registro alla.
+class _CatalogPicker extends StatefulWidget {
+  const _CatalogPicker({required this.titulo, required this.items});
+  final String titulo;
+
+  /// Ya vienen filtradas por familia: lo que se lista es lo compatible.
+  final List<ComponentCatalogItem> items;
+
+  @override
+  State<_CatalogPicker> createState() => _CatalogPickerState();
+}
+
+class _CatalogPickerState extends State<_CatalogPicker> {
+  final _searchController = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final needle = _query.trim().toUpperCase();
+    final items = needle.isEmpty
+        ? widget.items
+        : widget.items
+            .where((item) => item.busqueda.contains(needle))
+            .toList(growable: false);
+    final disponibles = widget.items.where((i) => !i.instalado).length;
+
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 14,
+          bottom: MediaQuery.viewInsetsOf(context).bottom + 14,
+        ),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+              width: 42,
+              height: 4,
+              decoration: BoxDecoration(
+                  color: AppColors.teal,
+                  borderRadius: BorderRadius.circular(99))),
+          const SizedBox(height: 14),
+          Text('${widget.titulo}: piezas registradas',
+              style: AppText.titulo.copyWith(color: AppColors.textPrimary)),
+          const SizedBox(height: 4),
+          Text(
+            '$disponibles disponibles de ${widget.items.length}',
+            style: AppText.subtitulo.copyWith(color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            key: const Key('catalog-search'),
+            controller: _searchController,
+            textCapitalization: TextCapitalization.characters,
+            onChanged: (value) => setState(() => _query = value),
+            decoration: const InputDecoration(
+              hintText: 'Buscar por marca, modelo o serial',
+              prefixIcon: Icon(Icons.search_rounded),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Flexible(
+            child: items.isEmpty
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 28),
+                    child: Text('Ninguna pieza coincide con la búsqueda',
+                        style: TextStyle(color: AppColors.textSecondary)),
+                  )
+                : ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: items.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (_, i) {
+                      final item = items[i];
+                      final donde = (item.equipo ?? '').trim().isEmpty
+                          ? 'loc. ${item.localizacion ?? '?'}'
+                          : item.equipo!;
+                      return ListTile(
+                        key: Key('catalog-item-${item.serial}'),
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(
+                          item.instalado
+                              ? Icons.link_rounded
+                              : Icons.check_circle_outline_rounded,
+                          color: item.instalado
+                              ? AppColors.textSecondary
+                              : AppColors.teal,
+                        ),
+                        title: Text(item.titulo,
+                            style: AppText.seccion
+                                .copyWith(color: AppColors.textPrimary)),
+                        subtitle: Text(
+                          item.instalado
+                              ? 'Serial ${item.serial} · instalada en $donde'
+                              : 'Serial ${item.serial} · disponible',
+                          style: AppText.apoyo.copyWith(
+                              color: item.instalado
+                                  ? AppColors.warning
+                                  : AppColors.textSecondary),
+                        ),
+                        onTap: () => Navigator.pop(context, item),
+                      );
+                    },
+                  ),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
 class _ReplacementFields {
   final brand = TextEditingController();
   final model = TextEditingController();
@@ -758,11 +1149,28 @@ class _ReplacementFields {
   final tension = TextEditingController();
   final lubrication = TextEditingController();
 
+  /// Que se dano en la pieza que sale. Opcional: no bloquea el reemplazo.
+  String? motivo;
+
+  /// Con que estatus queda la pieza retirada y a donde va. Lo elige el
+  /// tecnico en cada reemplazo.
+  String? estadoSaliente;
+  String? sitioSaliente;
+
+  /// Hay algo escrito en los tres campos obligatorios.
+  bool get completo =>
+      brand.text.trim().isNotEmpty &&
+      model.text.trim().isNotEmpty &&
+      serial.text.trim().isNotEmpty;
+
   ReplacementData toData({required bool updateTechnicalSpecs}) =>
       ReplacementData(
         brand: brand.text,
         model: model.text,
         serial: serial.text,
+        motivo: motivo,
+        estadoSaliente: estadoSaliente,
+        sitioSaliente: sitioSaliente,
         updateTechnicalSpecs: updateTechnicalSpecs,
         voltage: voltage.text,
         current: current.text,

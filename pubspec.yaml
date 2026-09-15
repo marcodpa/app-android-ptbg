@@ -1,6 +1,6 @@
 name: scv_ptbg
-description: Sistema de Captura de Vibraciones PTBG
-version: 1.0.0+1
+description: STER - Sistema de Trazabilidad de Equipos Rotativos
+version: 1.1.1+3
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -8,17 +8,23 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  # Textos de Material (date/time pickers, tooltips) en espanol.
+  flutter_localizations:
+    sdk: flutter
   sqflite: ^2.3.2
   path: ^1.9.0
   http: ^1.2.1
   mobile_scanner: ^5.1.1
   shared_preferences: ^2.2.3
-  connectivity_plus: ^6.0.3
-  intl: ^0.19.0
+  # Fijado por flutter_localizations: cada version del SDK exige la suya.
+  intl: ^0.20.2
   uuid: ^4.4.0
-  provider: ^6.1.2
   pdf: ^3.11.1
   printing: ^5.13.4
+  # Se importa directo para dibujar el QR de la etiqueta de un equipo nuevo.
+  # Ya venia con printing, pero se declara porque el codigo lo usa por su
+  # cuenta y no debe depender de que printing siga trayendolo.
+  barcode: ^2.2.9
 
 dev_dependencies:
   flutter_test:

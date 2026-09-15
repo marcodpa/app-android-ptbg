@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../db/db_helper.dart';
 import '../models/models.dart';
+import '../models/measurement_validation.dart';
+import '../models/sesion.dart';
 import '../theme.dart';
+import '../widgets/avisos.dart';
+import '../widgets/capture_summary.dart';
+import '../widgets/fecha_medicion.dart';
+import '../widgets/industrial_navigation.dart';
+import '../widgets/measurement_advisory_banner.dart';
 import '../widgets/widgets.dart';
 
 typedef AlignmentSaveCallback = Future<void> Function(
@@ -27,11 +33,13 @@ class AlignmentCaptureScreen extends StatefulWidget {
     required this.equipo,
     this.measurementToEdit,
     this.onSave,
+    this.odt,
   });
 
   final Equipo equipo;
   final AlignmentMeasurement? measurementToEdit;
   final AlignmentSaveCallback? onSave;
+  final int? odt;
 
   @override
   State<AlignmentCaptureScreen> createState() => _AlignmentCaptureScreenState();
@@ -41,6 +49,7 @@ class _AlignmentCaptureScreenState extends State<AlignmentCaptureScreen> {
   final _formKey = GlobalKey<FormState>();
   final _observationController = TextEditingController();
   final _controllers = <String, TextEditingController>{};
+  final _fechaMedicion = FechaHoraMedicion();
   late final List<AlignmentSection> _sections;
   bool _saving = false;
 
@@ -53,13 +62,27 @@ class _AlignmentCaptureScreenState extends State<AlignmentCaptureScreen> {
       _controllers[field.column] = TextEditingController(
         text: previous == null ? '' : _formatAlignmentValue(previous),
       );
+      // El resumen junto a las observaciones refleja lo que se va escribiendo.
+      _controllers[field.column]!.addListener(_refrescarResumen);
     }
     _observationController.text = widget.measurementToEdit?.observaciones ?? '';
+    // Al editar, la fecha original de la medicion se conserva y el selector
+    // parte de ella; en una captura nueva queda en "ahora".
+    final existente = widget.measurementToEdit;
+    if (existente != null) {
+      _fechaMedicion.elegida =
+          DateTime.tryParse('${existente.fecha} ${existente.hora}');
+    }
+  }
+
+  void _refrescarResumen() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
     for (final controller in _controllers.values) {
+      controller.removeListener(_refrescarResumen);
       controller.dispose();
     }
     _observationController.dispose();
@@ -67,12 +90,7 @@ class _AlignmentCaptureScreenState extends State<AlignmentCaptureScreen> {
   }
 
   String? _validateValue(String? raw) {
-    final value = (raw ?? '').trim();
-    if (value.isEmpty) return 'Valor obligatorio';
-    if (parseAlignmentValue(value) == null) {
-      return 'Use coma y máximo 2 decimales';
-    }
-    return null;
+    return MeasurementValidation.requiredNumber(raw);
   }
 
   Future<void> _save() async {
@@ -80,7 +98,6 @@ class _AlignmentCaptureScreenState extends State<AlignmentCaptureScreen> {
     setState(() => _saving = true);
 
     final existing = widget.measurementToEdit;
-    final now = DateTime.now();
     var responsable = existing?.responsable ?? '';
     var cargo = existing?.cargo ?? '';
     try {
@@ -106,8 +123,8 @@ class _AlignmentCaptureScreenState extends State<AlignmentCaptureScreen> {
       localizacion: widget.equipo.localizacion,
       sistema: widget.equipo.sistema,
       puntos: widget.equipo.puntos,
-      fecha: existing?.fecha ?? DateFormat('yyyy-MM-dd').format(now),
-      hora: existing?.hora ?? DateFormat('HH:mm:ss').format(now),
+      fecha: _fechaMedicion.fecha,
+      hora: _fechaMedicion.hora,
       valores: {
         for (final entry in _controllers.entries)
           entry.key: parseAlignmentValue(entry.value.text),
@@ -120,7 +137,7 @@ class _AlignmentCaptureScreenState extends State<AlignmentCaptureScreen> {
       marca: info?.marca ?? existing?.marca,
       modelo: info?.modelo ?? existing?.modelo,
       serial: info?.serial ?? existing?.serial,
-      odt: null,
+      odt: existing?.odt ?? widget.odt,
     );
 
     try {
@@ -131,35 +148,56 @@ class _AlignmentCaptureScreenState extends State<AlignmentCaptureScreen> {
       } else {
         await DbHelper.instance.updateAlignment(measurement);
       }
+      if (existing == null) {
+        await _fechaMedicion.registrarSiManual(
+          servicio: 'alineación',
+          localizacion: widget.equipo.localizacion,
+          uuid: measurement.uuid,
+        );
+      } else {
+        // Corregir una alineacion existente es cosa del administrador y
+        // queda en la bitacora con lo que cambio, valor por valor.
+        final cambios = resumenCambios(
+          {
+            ...existing.valores,
+            'fecha': '${existing.fecha} ${existing.hora}',
+            'obs': existing.observaciones,
+            'odt': existing.odt,
+          },
+          {
+            ...measurement.valores,
+            'fecha': '${measurement.fecha} ${measurement.hora}',
+            'obs': measurement.observaciones,
+            'odt': measurement.odt,
+          },
+        );
+        if (cambios.isNotEmpty) {
+          try {
+            await DbHelper.instance.registrarEventoAdmin(
+              usuario: await Sesion.usuarioActual(),
+              cargo: await Sesion.cargoActual(),
+              accion: 'EDICIÓN',
+              servicio: 'alineación',
+              localizacion: measurement.localizacion,
+              uuidMedicion: measurement.uuid,
+              detalle: cambios,
+            );
+          } catch (_) {}
+        }
+      }
     } catch (_) {
       if (!mounted) return;
       setState(() => _saving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No se pudo guardar localmente'),
-          backgroundColor: AppColors.error,
-        ),
-      );
+      avisar(context, 'No se pudo guardar localmente', AppColors.error);
       return;
     }
 
     if (!mounted) return;
     setState(() => _saving = false);
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Alineación guardada'),
-        content: const Text(
-          'Alineación guardada en la tablet para subirla por USB',
-        ),
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cerrar'),
-          ),
-        ],
-      ),
+    await avisarGuardado(
+      context,
+      titulo: 'Alineación guardada',
+      mensaje: 'Alineación guardada en la tablet para subirla por USB',
     );
     if (mounted) Navigator.pop(context, true);
   }
@@ -169,9 +207,9 @@ class _AlignmentCaptureScreenState extends State<AlignmentCaptureScreen> {
     if (_sections.isEmpty) {
       return Scaffold(
         backgroundColor: AppColors.bg,
-        appBar: const AppHeader(
-          title: 'Medición de alineación',
-          subtitle: 'Operación no disponible',
+        appBar: const IndustrialAppBar(
+          titulo: 'Medición de alineación',
+          subtitulo: 'Operación no disponible',
         ),
         body: SafeArea(
           child: Center(
@@ -203,24 +241,19 @@ class _AlignmentCaptureScreenState extends State<AlignmentCaptureScreen> {
                       ),
                     ),
                     const SizedBox(height: 18),
-                    const Text(
+                    Text(
                       'Alineación no disponible para este equipo',
                       textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 19,
-                        fontWeight: FontWeight.w900,
-                      ),
+                      style:
+                          AppText.titulo.copyWith(color: AppColors.textPrimary),
                     ),
                     const SizedBox(height: 8),
-                    const Text(
+                    Text(
                       'Esta operación solo aplica a equipos MOTOR–BOMBA '
                       'y MOTOR–CAJA–BOMBA.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(
+                      style: AppText.cuerpo.copyWith(
                         color: AppColors.textSecondary,
-                        fontSize: 13,
-                        height: 1.4,
                       ),
                     ),
                     const SizedBox(height: 22),
@@ -240,11 +273,11 @@ class _AlignmentCaptureScreenState extends State<AlignmentCaptureScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppHeader(
-        title: widget.measurementToEdit == null
+      appBar: IndustrialAppBar(
+        titulo: widget.measurementToEdit == null
             ? 'Medición de alineación'
             : 'Revisar alineación',
-        subtitle: 'Ejes y acoples',
+        subtitulo: 'Ejes y acoples',
       ),
       body: SafeArea(
         child: Form(
@@ -266,6 +299,28 @@ class _AlignmentCaptureScreenState extends State<AlignmentCaptureScreen> {
                   ),
                   const SizedBox(height: 14),
                 ],
+                // Lo capturado queda a la vista mientras escribe la
+                // observacion: cada acople con sus cuatro valores.
+                CaptureSummary(
+                  headers: const ['Ang. V', 'Ang. H', 'Comp. V', 'Comp. H'],
+                  rows: [
+                    for (var i = 0; i < _sections.length; i++)
+                      CaptureSummaryRow(
+                        numero: '${i + 1}',
+                        nombre: _sections[i]
+                            .title
+                            .replaceFirst('ALINEACIÓN ', '')
+                            .replaceFirst('ALINEACION ', ''),
+                        valores: [
+                          for (final field in _sections[i].fields)
+                            CaptureSummary.formatear(
+                              _controllers[field.column]?.text,
+                            ),
+                        ],
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 14),
                 TextFormField(
                   key: const Key('alignment-observations'),
                   controller: _observationController,
@@ -277,6 +332,9 @@ class _AlignmentCaptureScreenState extends State<AlignmentCaptureScreen> {
                     prefixIcon: Icon(Icons.notes_rounded),
                   ),
                 ),
+                const SizedBox(height: 12),
+                // Para la medicion hecha antes sin la tablet a mano.
+                SelectorFechaMedicion(valor: _fechaMedicion),
                 const SizedBox(height: 20),
                 ElevatedButton.icon(
                   key: const Key('alignment-save-button'),
@@ -339,11 +397,7 @@ class _EquipmentHeader extends StatelessWidget {
               children: [
                 Text(
                   equipo.equipo,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w900,
-                  ),
+                  style: AppText.seccion.copyWith(color: Colors.white),
                 ),
                 const SizedBox(height: 5),
                 Wrap(
@@ -387,11 +441,7 @@ class _EquipmentMeta extends StatelessWidget {
         const SizedBox(width: 4),
         Text(
           label,
-          style: const TextStyle(
-            color: Colors.white70,
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-          ),
+          style: AppText.apoyo.copyWith(color: Colors.white70),
         ),
       ],
     );
@@ -419,17 +469,13 @@ class _AlignmentCard extends StatelessWidget {
           children: [
             Text(
               section.title,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w900,
-                    color: AppColors.headerTop,
-                  ),
+              style: AppText.seccion.copyWith(color: AppColors.textPrimary),
             ),
             const SizedBox(height: 4),
-            const Text(
+            Text(
               'Registre los valores verticales y horizontales del acople',
-              style: TextStyle(
+              style: AppText.apoyo.copyWith(
                 color: AppColors.textSecondary,
-                fontSize: 12,
               ),
             ),
             const SizedBox(height: 16),
@@ -496,11 +542,7 @@ class _AlignmentMetricGroup extends StatelessWidget {
               const SizedBox(width: 9),
               Text(
                 title,
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                ),
+                style: AppText.seccion.copyWith(color: AppColors.textPrimary),
               ),
             ],
           ),
@@ -532,39 +574,53 @@ class _AlignmentFieldInput extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return TextFormField(
-      key: Key('alignment-${field.column}'),
-      controller: controller,
-      validator: validator,
-      autovalidateMode: AutovalidateMode.onUserInteraction,
-      keyboardType: const TextInputType.numberWithOptions(
-        decimal: true,
-        signed: true,
-      ),
-      decoration: InputDecoration(
-        labelText: field.label,
-        hintText: '0,05',
-        helperText: 'Ejemplo: 0,05',
-        prefixIcon: Padding(
-          padding: const EdgeInsets.all(11),
-          child: Container(
-            alignment: Alignment.center,
-            width: 30,
-            decoration: BoxDecoration(
-              color: AppColors.tealLight,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              field.column.endsWith('_V') ? 'V' : 'H',
-              style: const TextStyle(
-                color: AppColors.tealDark,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        MeasurementAdvisoryBanner(
+          advisory: MeasurementAdvisory.alignment(
+            MeasurementValidation.parseDecimal(controller.text),
           ),
         ),
-        suffixText: field.unit,
-      ),
+        const SizedBox(height: 5),
+        TextFormField(
+          key: Key('alignment-${field.column}'),
+          controller: controller,
+          validator: validator,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          keyboardType: const TextInputType.numberWithOptions(
+            decimal: true,
+            signed: true,
+          ),
+          inputFormatters: [
+            MeasurementValidation.decimalFormatter(
+              signed: true,
+              decimalPlaces: 2,
+            ),
+          ],
+          onChanged: (_) => (context as Element).markNeedsBuild(),
+          decoration: InputDecoration(
+            labelText: field.label,
+            hintText: '0,05',
+            prefixIcon: Padding(
+              padding: const EdgeInsets.all(11),
+              child: Container(
+                alignment: Alignment.center,
+                width: 30,
+                decoration: BoxDecoration(
+                  color: AppColors.tealLight,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  field.column.endsWith('_V') ? 'V' : 'H',
+                  style: AppText.micro.copyWith(color: AppColors.tealDark),
+                ),
+              ),
+            ),
+            suffixText: field.unit,
+          ),
+        ),
+      ],
     );
   }
 }

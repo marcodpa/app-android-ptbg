@@ -6,11 +6,15 @@ import '../models/medicion_remota.dart';
 import '../models/models.dart';
 import '../models/temperature_measurement.dart';
 import '../models/temperature_plan.dart';
+import '../models/lubrication_measurement.dart';
+import '../models/replacement_request.dart';
+import '../models/coupling_change.dart';
 import '../services/api_service.dart';
 import '../services/mediciones_service.dart';
 import '../services/print_service.dart';
 import '../theme.dart';
-import '../widgets/widgets.dart';
+import '../widgets/avisos.dart';
+import '../widgets/industrial_navigation.dart';
 
 String _alignmentHistorySignature(AlignmentMeasurement measurement) {
   String text(String? value) =>
@@ -87,6 +91,10 @@ class _MedicionesScreenState extends State<MedicionesScreen> {
   List<TemperatureMeasurement> _temperaturasLocales = [];
   List<TemperatureReading> _temperaturasRemotas = [];
   List<AlignmentMeasurement> _alineaciones = [];
+  List<LubricationMeasurement> _lubricacionesLocales = [];
+  List<LubricationReading> _lubricacionesRemotas = [];
+  List<ReplacementLocalOperation> _reemplazos = [];
+  List<CouplingChange> _cambiosCoupling = [];
   Map<int, Set<String>> _temperatureColumnsByLocation = {};
   bool _loadingLocal = true;
   bool _loadingRemotas = true;
@@ -115,6 +123,8 @@ class _MedicionesScreenState extends State<MedicionesScreen> {
       _cargarRemotasCache(),
       _loadTemperatures(),
       _loadAlignments(),
+      _loadLubrications(),
+      _loadServiceEvents(),
     ]);
 
     if (_online) {
@@ -205,6 +215,49 @@ class _MedicionesScreenState extends State<MedicionesScreen> {
     }
   }
 
+  Future<void> _loadLubrications() async {
+    if (!kIsWeb) {
+      try {
+        final local = await DbHelper.instance.getLocalLubrications();
+        final cached = await DbHelper.instance.getRemoteLubricationHistory();
+        if (mounted) {
+          setState(() {
+            _lubricacionesLocales = local;
+            _lubricacionesRemotas = cached;
+          });
+        }
+      } catch (_) {}
+    }
+    if (_online) {
+      try {
+        final remote = await ApiService.instance.fetchLubricationHistory(
+          limit: 500,
+        );
+        if (!kIsWeb) {
+          await DbHelper.instance.replaceRemoteLubricationHistory(remote);
+        }
+        if (mounted) setState(() => _lubricacionesRemotas = remote);
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _loadServiceEvents() async {
+    if (kIsWeb) return;
+    try {
+      final replacements = await DbHelper.instance.getLocalReplacements();
+      final coupling = await DbHelper.instance.getLocalCouplingChanges();
+      if (mounted) {
+        setState(() {
+          _reemplazos = replacements;
+          _cambiosCoupling = coupling;
+        });
+      }
+    } catch (_) {}
+  }
+
+  /// Catalogo indexado por localizacion, para nombrar filas sin consultar.
+  Map<int, Equipo> _equiposPorLoc = const {};
+
   Future<void> _cargarLocales() async {
     if (kIsWeb) {
       if (mounted) setState(() => _loadingLocal = false);
@@ -214,15 +267,25 @@ class _MedicionesScreenState extends State<MedicionesScreen> {
     try {
       final db = await DbHelper.instance.database;
       final rows = await db.rawQuery(
-        'SELECT * FROM MEDICIONES_LOCAL '
+        // La pestaña Tablet representa trabajo pendiente. El histórico ya
+        // sincronizado se muestra desde MEDICIONES_REMOTAS, cuyo contenido es
+        // el espejo de MariaDB. Así una toma borrada en planta no reaparece
+        // desde una copia local antigua.
+        'SELECT * FROM MEDICIONES_LOCAL WHERE sincronizado = 0 '
         'ORDER BY fecha DESC, hora DESC, created_at DESC',
       );
+      // El catalogo de una vez: cada tarjeta resolvia su nombre de equipo
+      // con un FutureBuilder que consultaba SQLite al entrar en pantalla, y
+      // el scroll iba disparando una consulta por fila.
+      final catalogo = await DbHelper.instance.getAllEquipos();
+      final porLoc = {for (final e in catalogo) e.localizacion: e};
       if (mounted) {
         setState(() {
+          _equiposPorLoc = porLoc;
           _locales = rows
-              .map((row) => MedicionLocal.fromMap(
-                    Map<String, dynamic>.from(row),
-                  ))
+              .map(
+                (row) => MedicionLocal.fromMap(Map<String, dynamic>.from(row)),
+              )
               .toList();
           _loadingLocal = false;
         });
@@ -338,13 +401,11 @@ class _MedicionesScreenState extends State<MedicionesScreen> {
   }
 
   void _snack(String mensaje, Color color) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(mensaje),
-        backgroundColor: color,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    // Casi todos los llamadores vienen de un await; sin esta guarda, cerrar
+    // la pantalla mientras la operacion termina revienta con un context
+    // muerto. Las otras copias de _snack en la app siempre la tuvieron.
+    if (!mounted) return;
+    avisar(context, mensaje, color);
   }
 
   List<MedicionRemota> get _remotasFiltradas {
@@ -374,157 +435,199 @@ class _MedicionesScreenState extends State<MedicionesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.bg,
-      appBar: AppHeader(
-        title: 'Mediciones',
-        subtitle: 'Histórico completo y capturas de la tablet',
-        actions: [
-          IconButton(
-            tooltip: 'Descargar todas las mediciones',
-            onPressed: _refreshing
-                ? null
-                : () {
-                    if (_measurementType == 'temperature') {
-                      _refreshTemperatures();
-                    } else if (_measurementType == 'alignment') {
-                      _refreshAlignments();
-                    } else {
-                      _actualizarDesdeServidor();
-                    }
-                  },
-            icon: _refreshing
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Icon(Icons.refresh_rounded),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Container(
-            color: AppColors.surface,
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: _TabBtn(
-                        label: 'Vibración',
-                        active: _measurementType == 'vibration',
-                        onTap: () => setState(
-                          () => _measurementType = 'vibration',
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _TabBtn(
-                        label: 'Alineación',
-                        active: _measurementType == 'alignment',
-                        onTap: () => setState(
-                          () => _measurementType = 'alignment',
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _TabBtn(
-                        label: 'Temperatura',
-                        active: _measurementType == 'temperature',
-                        onTap: () => setState(
-                          () => _measurementType = 'temperature',
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _TabBtn(
-                        label: 'MariaDB (${_remoteMeasurementCount()})',
-                        active: _tab == 'bd',
-                        onTap: () => setState(() => _tab = 'bd'),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _TabBtn(
-                        label: 'Tablet (${_localMeasurementCount()})',
-                        active: _tab == 'local',
-                        onTap: () => setState(() => _tab = 'local'),
-                      ),
-                    ),
-                  ],
-                ),
-                if (_tab == 'bd' && _measurementType == 'vibration') ...[
-                  const SizedBox(height: 9),
-                  TextField(
-                    onChanged: (value) => setState(() => _busqueda = value),
-                    decoration: const InputDecoration(
-                      isDense: true,
-                      hintText: 'Buscar equipo, tag, localización o fecha…',
-                      prefixIcon: Icon(
-                        Icons.search_rounded,
-                        size: 18,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ),
-                ],
+    return IndustrialShell(
+      activeRoute: '/mediciones',
+      child: Scaffold(
+        backgroundColor: esterThemeController.isDark
+            ? AppColors.bg
+            : const Color(0xFFF7FAFE),
+        body: Column(
+          children: [
+            IndustrialContentHeader(
+              title: 'Mediciones',
+              subtitle: 'Histórico completo y capturas de la tablet',
+              icon: Icons.history_rounded,
+              actions: [
+                IconButton(
+                  tooltip: 'Descargar todas las mediciones',
+                  onPressed: _refreshing
+                      ? null
+                      : () {
+                          if (_measurementType == 'temperature') {
+                            _refreshTemperatures();
+                          } else if (_measurementType == 'lubrication') {
+                            _loadLubrications();
+                          } else if (_measurementType == 'alignment') {
+                            _refreshAlignments();
+                          } else if (_measurementType == 'replacement' ||
+                              _measurementType == 'coupling') {
+                            _loadServiceEvents();
+                          } else {
+                            _actualizarDesdeServidor();
+                          }
+                        },
+                  icon: _refreshing
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.teal,
+                          ),
+                        )
+                      : const Icon(Icons.refresh_rounded),
+                )
               ],
             ),
-          ),
-          if (_tab == 'bd' && _errorRemoto != null)
             Container(
-              width: double.infinity,
-              color: AppColors.warningBg,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              child: Text(
-                'Modo caché: $_errorRemoto',
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: AppColors.warning,
-                  fontSize: 11,
-                ),
+              color: AppColors.surface,
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _TabBtn(
+                          label: 'Vibración',
+                          active: _measurementType == 'vibration',
+                          onTap: () =>
+                              setState(() => _measurementType = 'vibration'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _TabBtn(
+                          label: 'Lubricación',
+                          active: _measurementType == 'lubrication',
+                          onTap: () =>
+                              setState(() => _measurementType = 'lubrication'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _TabBtn(
+                          label: 'Alineación',
+                          active: _measurementType == 'alignment',
+                          onTap: () =>
+                              setState(() => _measurementType = 'alignment'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _TabBtn(
+                          label: 'Temperatura',
+                          active: _measurementType == 'temperature',
+                          onTap: () =>
+                              setState(() => _measurementType = 'temperature'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _TabBtn(
+                          label: 'Reemplazos',
+                          active: _measurementType == 'replacement',
+                          onTap: () =>
+                              setState(() => _measurementType = 'replacement'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _TabBtn(
+                          label: 'Coupling',
+                          active: _measurementType == 'coupling',
+                          onTap: () =>
+                              setState(() => _measurementType = 'coupling'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _TabBtn(
+                          label: 'MariaDB (${_remoteMeasurementCount()})',
+                          active: _tab == 'bd',
+                          onTap: () => setState(() => _tab = 'bd'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _TabBtn(
+                          label: 'Tablet (${_localMeasurementCount()})',
+                          active: _tab == 'local',
+                          onTap: () => setState(() => _tab = 'local'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (_tab == 'bd' && _measurementType == 'vibration') ...[
+                    const SizedBox(height: 9),
+                    TextField(
+                      onChanged: (value) => setState(() => _busqueda = value),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        hintText: 'Buscar equipo, tag, localización o fecha…',
+                        prefixIcon: Icon(
+                          Icons.search_rounded,
+                          size: 18,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
-          Expanded(
-            child: _measurementType == 'temperature'
-                ? _buildTemperatures()
-                : _measurementType == 'alignment'
-                    ? _buildAlignments()
-                    : (_tab == 'local' ? _buildLocal() : _buildRemotas()),
-          ),
-        ],
+            if (_tab == 'bd' && _errorRemoto != null)
+              Container(
+                width: double.infinity,
+                color: AppColors.warningBg,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                child: Text(
+                  'Modo caché: $_errorRemoto',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppText.apoyo.copyWith(color: AppColors.warning),
+                ),
+              ),
+            Expanded(
+              child: _measurementType == 'lubrication'
+                  ? _buildLubrications()
+                  : _measurementType == 'replacement'
+                      ? _buildReplacements()
+                      : _measurementType == 'coupling'
+                          ? _buildCouplingChanges()
+                          : _measurementType == 'temperature'
+                              ? _buildTemperatures()
+                              : _measurementType == 'alignment'
+                                  ? _buildAlignments()
+                                  : (_tab == 'local'
+                                      ? _buildLocal()
+                                      : _buildRemotas()),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildRemotas() {
     if (_loadingRemotas && _remotas.isEmpty) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 12),
+            const CircularProgressIndicator(),
+            const SizedBox(height: 12),
             Text(
               'Cargando histórico de mediciones…',
-              style: TextStyle(
-                fontSize: 13,
-                color: AppColors.textSecondary,
-              ),
+              style: AppText.cuerpo.copyWith(color: AppColors.textSecondary),
             ),
           ],
         ),
@@ -547,10 +650,7 @@ class _MedicionesScreenState extends State<MedicionesScreen> {
               _remotas.isEmpty
                   ? 'No hay mediciones descargadas'
                   : 'No hay resultados para la búsqueda',
-              style: const TextStyle(
-                fontSize: 15,
-                color: AppColors.textSecondary,
-              ),
+              style: AppText.cuerpo.copyWith(color: AppColors.textSecondary),
             ),
             if (_remotas.isEmpty) ...[
               const SizedBox(height: 14),
@@ -589,22 +689,19 @@ class _MedicionesScreenState extends State<MedicionesScreen> {
     }
 
     if (_locales.isEmpty) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
+            const Icon(
               Icons.folder_open_rounded,
               size: 56,
               color: AppColors.textHint,
             ),
-            SizedBox(height: 12),
+            const SizedBox(height: 12),
             Text(
               'Sin mediciones capturadas en la tablet',
-              style: TextStyle(
-                fontSize: 15,
-                color: AppColors.textSecondary,
-              ),
+              style: AppText.cuerpo.copyWith(color: AppColors.textSecondary),
             ),
           ],
         ),
@@ -614,7 +711,10 @@ class _MedicionesScreenState extends State<MedicionesScreen> {
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
       itemCount: _locales.length,
-      itemBuilder: (_, index) => _LocalCard(m: _locales[index]),
+      itemBuilder: (_, index) => _LocalCard(
+        m: _locales[index],
+        equipo: _equiposPorLoc[_locales[index].localizacion],
+      ),
     );
   }
 
@@ -647,8 +747,11 @@ class _MedicionesScreenState extends State<MedicionesScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.thermostat_outlined,
-                size: 56, color: AppColors.textHint),
+            Icon(
+              Icons.thermostat_outlined,
+              size: 56,
+              color: AppColors.textHint,
+            ),
             SizedBox(height: 12),
             Text(
               'Sin mediciones de temperatura',
@@ -673,6 +776,15 @@ class _MedicionesScreenState extends State<MedicionesScreen> {
   }
 
   int _remoteMeasurementCount() {
+    if (_measurementType == 'replacement') {
+      return _reemplazos.where((item) => item.synchronized).length;
+    }
+    if (_measurementType == 'coupling') {
+      return _cambiosCoupling.where((item) => item.sincronizado).length;
+    }
+    if (_measurementType == 'lubrication') {
+      return _lubricacionesRemotas.length;
+    }
     if (_measurementType == 'temperature') return _temperaturasRemotas.length;
     if (_measurementType == 'alignment') {
       return _alineaciones.where((item) => item.sincronizado).length;
@@ -681,11 +793,88 @@ class _MedicionesScreenState extends State<MedicionesScreen> {
   }
 
   int _localMeasurementCount() {
+    if (_measurementType == 'replacement') {
+      return _reemplazos.where((item) => !item.synchronized).length;
+    }
+    if (_measurementType == 'coupling') {
+      return _cambiosCoupling.where((item) => !item.sincronizado).length;
+    }
+    if (_measurementType == 'lubrication') {
+      return _lubricacionesLocales.length;
+    }
     if (_measurementType == 'temperature') return _temperaturasLocales.length;
     if (_measurementType == 'alignment') {
       return _alineaciones.where((item) => !item.sincronizado).length;
     }
     return _locales.length;
+  }
+
+  Widget _buildLubrications() {
+    final measurements = _tab == 'local'
+        ? _lubricacionesLocales
+        : _lubricacionesRemotas
+            .map((item) => item.copyWith(sincronizado: true))
+            .toList();
+    if (measurements.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.oil_barrel_outlined,
+              size: 56,
+              color: AppColors.textHint,
+            ),
+            SizedBox(height: 12),
+            Text(
+              'Sin registros de lubricación',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+          ],
+        ),
+      );
+    }
+    return RefreshIndicator(
+      onRefresh: _loadLubrications,
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+        itemCount: measurements.length,
+        itemBuilder: (_, index) {
+          final measurement = measurements[index];
+          final values = measurement.valores.entries
+              .where((entry) => entry.value != null)
+              .map(
+                (entry) => '${entry.key}: ${entry.value!.toStringAsFixed(2)} g',
+              )
+              .join(' · ');
+          return Card(
+            child: ListTile(
+              leading: const Icon(
+                Icons.oil_barrel_rounded,
+                color: AppColors.orange,
+              ),
+              title: Text(
+                'LOC-${measurement.localizacion} · ${measurement.sistema}',
+              ),
+              subtitle: Text(
+                '${measurement.fecha} ${measurement.hora}'
+                '${measurement.odt == null ? '' : ' · ODT ${measurement.odt}'}\n$values'
+                '${(measurement.observaciones ?? '').trim().isEmpty ? '' : '\n${measurement.observaciones}'}',
+              ),
+              isThreeLine: true,
+              trailing: Text(
+                measurement.sincronizado ? 'Sincronizada' : 'Pendiente',
+                style: AppText.etiqueta.copyWith(
+                  color: measurement.sincronizado
+                      ? AppColors.success
+                      : AppColors.warning,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   Widget _buildAlignments() {
@@ -701,11 +890,7 @@ class _MedicionesScreenState extends State<MedicionesScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.straighten_rounded,
-              size: 56,
-              color: AppColors.textHint,
-            ),
+            Icon(Icons.straighten_rounded, size: 56, color: AppColors.textHint),
             SizedBox(height: 12),
             Text(
               'Sin mediciones de alineación',
@@ -720,19 +905,116 @@ class _MedicionesScreenState extends State<MedicionesScreen> {
       child: ListView.builder(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
         itemCount: measurements.length,
-        itemBuilder: (_, index) => AlignmentHistoryCard(
-          measurement: measurements[index],
-        ),
+        itemBuilder: (_, index) =>
+            AlignmentHistoryCard(measurement: measurements[index]),
       ),
     );
   }
+
+  Widget _buildReplacements() {
+    final operations = _reemplazos
+        .where(
+            (item) => _tab == 'local' ? !item.synchronized : item.synchronized)
+        .toList();
+    if (operations.isEmpty) {
+      return _emptyServiceHistory(
+        Icons.build_circle_outlined,
+        'Sin registros de reemplazo',
+      );
+    }
+    return RefreshIndicator(
+      onRefresh: _loadServiceEvents,
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+        itemCount: operations.length,
+        itemBuilder: (_, index) {
+          final operation = operations[index];
+          final components = operation.components
+              .map((item) =>
+                  '${replacementComponentLabel(item.component)}: ${item.brand} ${item.model} · ${item.serial}')
+              .join('\n');
+          return Card(
+            child: ListTile(
+              leading: const Icon(
+                Icons.build_circle_outlined,
+                color: AppColors.orange,
+              ),
+              title: Text('Reemplazo LOC-${operation.localizacion}'),
+              subtitle: Text(
+                '${operation.fecha} ${operation.hora}'
+                '${operation.odt == null ? '' : '\nODT ${operation.odt}'}'
+                '\n$components',
+              ),
+              isThreeLine: true,
+              trailing: _serviceStatus(operation.synchronized),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildCouplingChanges() {
+    final changes = _cambiosCoupling
+        .where(
+            (item) => _tab == 'local' ? !item.sincronizado : item.sincronizado)
+        .toList();
+    if (changes.isEmpty) {
+      return _emptyServiceHistory(
+        Icons.settings_input_component_rounded,
+        'Sin cambios de coupling registrados',
+      );
+    }
+    return RefreshIndicator(
+      onRefresh: _loadServiceEvents,
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+        itemCount: changes.length,
+        itemBuilder: (_, index) {
+          final change = changes[index];
+          return Card(
+            child: ListTile(
+              leading: const Icon(
+                Icons.settings_input_component_rounded,
+                color: AppColors.teal,
+              ),
+              title: Text('Cambio de coupling LOC-${change.localizacion}'),
+              subtitle: Text(
+                '${change.fecha} ${change.hora}'
+                '${change.odt == null ? '' : '\nODT ${change.odt}'}'
+                '${change.responsable.trim().isEmpty ? '' : '\n${change.responsable} · ${change.cargo}'}'
+                '${change.observaciones.trim().isEmpty ? '' : '\n${change.observaciones}'}',
+              ),
+              isThreeLine: true,
+              trailing: _serviceStatus(change.sincronizado),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _emptyServiceHistory(IconData icon, String label) => Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 56, color: AppColors.textHint),
+            const SizedBox(height: 12),
+            Text(label, style: const TextStyle(color: AppColors.textSecondary)),
+          ],
+        ),
+      );
+
+  Widget _serviceStatus(bool synchronized) => Text(
+        synchronized ? 'Sincronizado' : 'Pendiente',
+        style: AppText.etiqueta.copyWith(
+          color: synchronized ? AppColors.success : AppColors.warning,
+        ),
+      );
 }
 
 class AlignmentHistoryCard extends StatelessWidget {
-  const AlignmentHistoryCard({
-    super.key,
-    required this.measurement,
-  });
+  const AlignmentHistoryCard({super.key, required this.measurement});
 
   final AlignmentMeasurement measurement;
 
@@ -756,7 +1038,7 @@ class AlignmentHistoryCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     'LOC-${measurement.localizacion} · ${measurement.sistema}',
-                    style: const TextStyle(fontWeight: FontWeight.w900),
+                    style: AppText.seccion,
                   ),
                 ),
                 _AlignmentSyncBadge(synchronized: measurement.sincronizado),
@@ -764,20 +1046,15 @@ class AlignmentHistoryCard extends StatelessWidget {
             ),
             const SizedBox(height: 5),
             Text(
-              '${measurement.fecha}  ${measurement.hora}',
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 12,
-              ),
+              '${measurement.fecha}  ${measurement.hora}'
+              '${measurement.odt == null ? '' : ' · ODT ${measurement.odt}'}',
+              style: AppText.apoyo.copyWith(color: AppColors.textSecondary),
             ),
             for (final section in sections) ...[
               const SizedBox(height: 14),
               Text(
                 section.title,
-                style: const TextStyle(
-                  color: AppColors.headerTop,
-                  fontWeight: FontWeight.w900,
-                ),
+                style: AppText.seccion.copyWith(color: AppColors.headerTop),
               ),
               const SizedBox(height: 8),
               for (final field in section.fields)
@@ -789,10 +1066,7 @@ class AlignmentHistoryCard extends StatelessWidget {
                         Expanded(child: Text(field.label)),
                         Text(
                           '${_formatted(measurement.valores[field.column]!)} ${field.unit}',
-                          style: const TextStyle(
-                            fontFamily: 'monospace',
-                            fontWeight: FontWeight.w800,
-                          ),
+                          style: AppText.mono,
                         ),
                       ],
                     ),
@@ -809,10 +1083,7 @@ class AlignmentHistoryCard extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 measurement.errorSync!.trim(),
-                style: const TextStyle(
-                  color: AppColors.error,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: AppText.cuerpoFuerte.copyWith(color: AppColors.error),
               ),
             ],
           ],
@@ -838,11 +1109,7 @@ class _AlignmentSyncBadge extends StatelessWidget {
       ),
       child: Text(
         synchronized ? 'Sincronizada' : 'Pendiente',
-        style: TextStyle(
-          color: color,
-          fontSize: 11,
-          fontWeight: FontWeight.w800,
-        ),
+        style: AppText.micro.copyWith(color: color),
       ),
     );
   }
@@ -887,12 +1154,14 @@ class TemperatureHistoryCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     'LOC-${measurement.localizacion} · ${measurement.sistema}',
-                    style: const TextStyle(fontWeight: FontWeight.w900),
+                    style: AppText.seccion,
                   ),
                 ),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: (measurement.sincronizado
                             ? AppColors.success
@@ -902,12 +1171,10 @@ class TemperatureHistoryCard extends StatelessWidget {
                   ),
                   child: Text(
                     measurement.sincronizado ? 'Sincronizada' : 'Pendiente',
-                    style: TextStyle(
+                    style: AppText.micro.copyWith(
                       color: measurement.sincronizado
                           ? AppColors.success
                           : AppColors.warning,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
@@ -915,11 +1182,9 @@ class TemperatureHistoryCard extends StatelessWidget {
             ),
             const SizedBox(height: 5),
             Text(
-              '${measurement.fecha}  ${measurement.hora}',
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 12,
-              ),
+              '${measurement.fecha}  ${measurement.hora}'
+              '${measurement.odt == null ? '' : ' · ODT ${measurement.odt}'}',
+              style: AppText.apoyo.copyWith(color: AppColors.textSecondary),
             ),
             const SizedBox(height: 10),
             Wrap(
@@ -938,7 +1203,7 @@ class TemperatureHistoryCard extends StatelessWidget {
                       ),
                       child: Text(
                         '${entry.key}  ${entry.value!.toStringAsFixed(2)} °C',
-                        style: const TextStyle(fontWeight: FontWeight.w800),
+                        style: AppText.dato,
                       ),
                     ),
                   )
@@ -952,7 +1217,7 @@ class TemperatureHistoryCard extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 measurement.errorSync!,
-                style: const TextStyle(color: AppColors.error, fontSize: 12),
+                style: AppText.apoyo.copyWith(color: AppColors.error),
               ),
             ],
           ],
@@ -966,10 +1231,7 @@ class _RemotaCard extends StatelessWidget {
   final MedicionRemota medicion;
   final bool esUltima;
 
-  const _RemotaCard({
-    required this.medicion,
-    required this.esUltima,
-  });
+  const _RemotaCard({required this.medicion, required this.esUltima});
 
   Color get _rmsColor {
     final value = medicion.rms ?? 0;
@@ -980,14 +1242,14 @@ class _RemotaCard extends StatelessWidget {
 
   Future<void> _print(BuildContext context) async {
     try {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Imprimiendo... solicitud enviada a la laptop'),
-          duration: Duration(seconds: 6),
-        ),
+      avisar(
+        context,
+        'Imprimiendo... solicitud enviada a la laptop',
+        AppColors.accent,
       );
-      final equipo = await DbHelper.instance
-          .getEquipoByLocalizacion(medicion.localizacion);
+      final equipo = await DbHelper.instance.getEquipoByLocalizacion(
+        medicion.localizacion,
+      );
       final info = await DbHelper.instance.getEquipoInfo(medicion.localizacion);
       final printEquipo = equipo ??
           Equipo(
@@ -1021,21 +1283,14 @@ class _RemotaCard extends StatelessWidget {
         info: info ?? printEquipo.info,
       );
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Impresion enviada. Espere a que salga en la laptop.'),
-          backgroundColor: AppColors.success,
-          duration: Duration(seconds: 5),
-        ),
+      avisar(
+        context,
+        'Impresión enviada. Espere a que salga en la laptop.',
+        AppColors.success,
       );
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('No se pudo imprimir: $e'),
-          backgroundColor: AppColors.error,
-        ),
-      );
+      avisar(context, 'No se pudo imprimir: $e', AppColors.error);
     }
   }
 
@@ -1053,11 +1308,7 @@ class _RemotaCard extends StatelessWidget {
             ),
             child: Text(
               '${entry.key}: ${entry.value!.toStringAsFixed(2)}',
-              style: const TextStyle(
-                fontSize: 11,
-                fontFamily: 'monospace',
-                color: AppColors.textPrimary,
-              ),
+              style: AppText.mono.copyWith(color: AppColors.textPrimary),
             ),
           ),
         )
@@ -1102,9 +1353,7 @@ class _RemotaCard extends StatelessWidget {
                         'LOC-${medicion.localizacion} · ${medicion.equipo}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
+                        style: AppText.cuerpoFuerte.copyWith(
                           color: AppColors.textPrimary,
                         ),
                       ),
@@ -1113,8 +1362,7 @@ class _RemotaCard extends StatelessWidget {
                         '${medicion.fecha}  ${medicion.hora}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 11,
+                        style: AppText.apoyo.copyWith(
                           color: AppColors.textSecondary,
                         ),
                       ),
@@ -1133,11 +1381,7 @@ class _RemotaCard extends StatelessWidget {
                     ),
                     child: Text(
                       'RMS ${medicion.rms!.toStringAsFixed(2)}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: _rmsColor,
-                      ),
+                      style: AppText.dato.copyWith(color: _rmsColor),
                     ),
                   ),
                 _PrintIconButton(onPressed: () => _print(context)),
@@ -1147,11 +1391,7 @@ class _RemotaCard extends StatelessWidget {
           if (valores.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
-              child: Wrap(
-                spacing: 6,
-                runSpacing: 4,
-                children: valores,
-              ),
+              child: Wrap(spacing: 6, runSpacing: 4, children: valores),
             ),
           Container(
             padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
@@ -1174,10 +1414,8 @@ class _RemotaCard extends StatelessWidget {
                   esUltima
                       ? 'Última registrada para este equipo'
                       : 'Histórico MariaDB · ID ${medicion.id}',
-                  style: TextStyle(
-                    fontSize: 11,
+                  style: AppText.apoyo.copyWith(
                     color: esUltima ? AppColors.success : AppColors.accent,
-                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 if (medicion.observaciones.isNotEmpty) ...[
@@ -1192,8 +1430,7 @@ class _RemotaCard extends StatelessWidget {
                     child: Text(
                       medicion.observaciones,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 11,
+                      style: AppText.apoyo.copyWith(
                         color: AppColors.textSecondary,
                       ),
                     ),
@@ -1211,7 +1448,10 @@ class _RemotaCard extends StatelessWidget {
 class _LocalCard extends StatelessWidget {
   final MedicionLocal m;
 
-  const _LocalCard({required this.m});
+  /// Resuelto por la pantalla desde su catalogo precargado.
+  final Equipo? equipo;
+
+  const _LocalCard({required this.m, required this.equipo});
 
   Color get _rmsColor {
     final value = m.rms ?? 0;
@@ -1225,14 +1465,14 @@ class _LocalCard extends StatelessWidget {
 
   Future<void> _print(BuildContext context) async {
     try {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Imprimiendo... solicitud enviada a la laptop'),
-          duration: Duration(seconds: 6),
-        ),
+      avisar(
+        context,
+        'Imprimiendo... solicitud enviada a la laptop',
+        AppColors.accent,
       );
-      final equipo =
-          await DbHelper.instance.getEquipoByLocalizacion(m.localizacion);
+      final equipo = await DbHelper.instance.getEquipoByLocalizacion(
+        m.localizacion,
+      );
       final info = await DbHelper.instance.getEquipoInfo(m.localizacion);
       final printEquipo = equipo ??
           Equipo(
@@ -1265,21 +1505,14 @@ class _LocalCard extends StatelessWidget {
         info: info ?? printEquipo.info,
       );
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Impresion enviada. Espere a que salga en la laptop.'),
-          backgroundColor: AppColors.success,
-          duration: Duration(seconds: 5),
-        ),
+      avisar(
+        context,
+        'Impresión enviada. Espere a que salga en la laptop.',
+        AppColors.success,
       );
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('No se pudo imprimir: $e'),
-          backgroundColor: AppColors.error,
-        ),
-      );
+      avisar(context, 'No se pudo imprimir: $e', AppColors.error);
     }
   }
 
@@ -1314,11 +1547,8 @@ class _LocalCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: FutureBuilder<Equipo?>(
-                    future: DbHelper.instance
-                        .getEquipoByLocalizacion(m.localizacion),
-                    builder: (context, snapshot) {
-                      final equipo = snapshot.data;
+                  child: Builder(
+                    builder: (context) {
                       final nombre = equipo?.equipo.trim().isNotEmpty == true
                           ? equipo!.equipo.trim()
                           : m.sistema;
@@ -1329,16 +1559,14 @@ class _LocalCard extends StatelessWidget {
                             'LOC-${m.localizacion} · $nombre',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
+                            style: AppText.cuerpoFuerte.copyWith(
                               color: AppColors.textPrimary,
                             ),
                           ),
                           Text(
-                            '${m.fecha}  ${m.hora}',
-                            style: const TextStyle(
-                              fontSize: 11,
+                            '${m.fecha}  ${m.hora}'
+                            '${m.odt == null ? '' : ' · ODT ${m.odt}'}',
+                            style: AppText.apoyo.copyWith(
                               color: AppColors.textSecondary,
                             ),
                           ),
@@ -1359,11 +1587,7 @@ class _LocalCard extends StatelessWidget {
                     ),
                     child: Text(
                       'RMS ${m.rms!.toStringAsFixed(2)}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: _rmsColor,
-                      ),
+                      style: AppText.dato.copyWith(color: _rmsColor),
                     ),
                   ),
                 _PrintIconButton(onPressed: () => _print(context)),
@@ -1382,10 +1606,8 @@ class _LocalCard extends StatelessWidget {
                 const SizedBox(width: 6),
                 Text(
                   'Lecturas capturadas: $_lecturasCapturadas',
-                  style: const TextStyle(
-                    fontSize: 11,
+                  style: AppText.etiqueta.copyWith(
                     color: AppColors.textSecondary,
-                    fontWeight: FontWeight.w700,
                   ),
                 ),
                 if ((m.observaciones ?? '').trim().isNotEmpty) ...[
@@ -1401,8 +1623,7 @@ class _LocalCard extends StatelessWidget {
                       m.observaciones!.trim(),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 11,
+                      style: AppText.apoyo.copyWith(
                         color: AppColors.textSecondary,
                       ),
                     ),
@@ -1433,9 +1654,7 @@ class _LocalCard extends StatelessWidget {
                   m.sincronizado
                       ? 'Sincronizada con MariaDB'
                       : 'Pendiente de sincronización',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
+                  style: AppText.apoyo.copyWith(
                     color:
                         m.sincronizado ? AppColors.success : AppColors.warning,
                   ),
@@ -1515,9 +1734,7 @@ class _TabBtn extends StatelessWidget {
         child: Center(
           child: Text(
             label,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
+            style: AppText.cuerpoFuerte.copyWith(
               color: active ? Colors.white : AppColors.textSecondary,
             ),
           ),

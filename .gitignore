@@ -65,6 +65,27 @@ tmp_tablet_check/
 tmp_usb_sync_manual/
 __pycache__/
 
+# Artefactos de trabajo y datos privados: no forman parte de la distribucion.
+/tmp/
+/output/
+/outputs/
+/qr_salida/
+/tmp_*
+/.codex/*
+!/.codex/skills/
+/graphify-out/
+/documentation/capturas*/
+/documentation/backup_*/
+/documentation/*.png
+/documentation/*.zip
+/documentation/Informe_visual_*.docx
+.env.*
+!.env.example
+*.pem
+*.p12
+*.pfx
+*.key
+
 # Logs y salidas locales de compilacion
 *.log
 *.out.log

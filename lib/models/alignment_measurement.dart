@@ -1,3 +1,5 @@
+import 'coercion.dart';
+
 const alignmentValueColumns = <String>[
   'AMB_ANGULO_V',
   'AMB_ANGULO_H',
@@ -15,21 +17,13 @@ const alignmentValueColumns = <String>[
 
 double? parseAlignmentValue(String input) {
   final value = input.trim();
-  if (!RegExp(r'^-?\d+(,\d{1,2})?$').hasMatch(value)) return null;
+  if (!RegExp(r'^-?\d+([\.,]\d{1,2})?$').hasMatch(value)) return null;
   return double.tryParse(value.replaceFirst(',', '.'));
 }
 
-double? _alignmentDouble(Object? value) {
-  if (value == null) return null;
-  if (value is num) return value.toDouble();
-  return double.tryParse(value.toString().trim().replaceAll(',', '.'));
-}
+double? _alignmentDouble(Object? value) => decimalDe(value);
 
-int _alignmentInt(Object? value) {
-  if (value is int) return value;
-  if (value is num) return value.toInt();
-  return int.tryParse('${value ?? ''}') ?? 0;
-}
+int _alignmentInt(Object? value) => enteroDe(value);
 
 String? _alignmentText(Object? value) {
   if (value == null) return null;

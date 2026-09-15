@@ -1,4 +1,4 @@
-# SCV-PTBG
+# STER — Sistema de Trazabilidad de Equipos Rotativos
 
 Aplicacion Flutter para inspeccion de equipos rotativos. Permite trabajar sin
 red en la tablet y guardar localmente:

@@ -29,16 +29,21 @@ const _equipoSinAlineacion = Equipo(
 void main() {
   Future<void> pumpScreen(WidgetTester tester) async {
     await tester.pumpWidget(
-      const MaterialApp(home: OperationSelectionScreen(equipo: _equipo)),
+      MaterialApp(
+        home: OperationSelectionScreen(
+          equipo: _equipo,
+          workOrderCreator: (_, __) async => 1785747000,
+        ),
+      ),
     );
   }
 
-  testWidgets('muestra las cuatro operaciones para PUNTOS 6', (tester) async {
+  testWidgets('muestra las cinco operaciones para PUNTOS 6', (tester) async {
     await pumpScreen(tester);
 
     expect(find.text('Vibracion'), findsOneWidget);
     expect(find.text('Medición de temperatura'), findsOneWidget);
-    expect(find.text('Lubricacion'), findsNothing);
+    expect(find.byKey(const Key('operation-lubrication')), findsOneWidget);
 
     await tester.drag(find.byType(ListView), const Offset(0, -400));
     await tester.pumpAndSettle();
@@ -59,10 +64,7 @@ void main() {
     expect(find.byKey(const Key('operation-alignment')), findsNothing);
   });
 
-  for (final caseData in const [
-    ('FIN-FAN', 4),
-    ('VENTILADORES', 5),
-  ]) {
+  for (final caseData in const [('FIN-FAN', 4), ('VENTILADORES', 5)]) {
     testWidgets('${caseData.$1} no ofrece alineación', (tester) async {
       final equipo = Equipo(
         id: 40 + caseData.$2,
@@ -79,15 +81,13 @@ void main() {
       );
 
       expect(find.text('Alineación'), findsNothing);
-      expect(
-        find.byKey(const Key('operation-alignment')),
-        findsNothing,
-      );
+      expect(find.byKey(const Key('operation-alignment')), findsNothing);
     });
   }
 
-  testWidgets('abre temperatura con el mismo equipo seleccionado',
-      (tester) async {
+  testWidgets('abre temperatura con el mismo equipo seleccionado', (
+    tester,
+  ) async {
     OperationType? launched;
     Equipo? launchedEquipment;
     await tester.pumpWidget(
@@ -112,8 +112,9 @@ void main() {
     expect(launchedEquipment, same(_equipo));
   });
 
-  testWidgets('no permite comenzar sin seleccionar una operacion',
-      (tester) async {
+  testWidgets('no permite comenzar sin seleccionar una operacion', (
+    tester,
+  ) async {
     await pumpScreen(tester);
 
     final button = tester.widget<ElevatedButton>(
@@ -122,7 +123,8 @@ void main() {
     expect(button.onPressed, isNull);
   });
 
-  testWidgets('al seleccionar ambas solicita cual comienza', (tester) async {
+  testWidgets('si hay reemplazo lo fuerza como primer servicio',
+      (tester) async {
     await pumpScreen(tester);
 
     tester
@@ -147,18 +149,19 @@ void main() {
     await tester.drag(find.byType(ListView), const Offset(0, -500));
     await tester.pumpAndSettle();
 
-    expect(find.text('Elige cual comienza'), findsOneWidget);
-    expect(find.text('Primero Vibracion'), findsOneWidget);
-    expect(find.text('Primero Reemplazo'), findsOneWidget);
+    expect(find.text('Elige cual comienza'), findsNothing);
+    expect(find.textContaining('El reemplazo se guardará primero'),
+        findsOneWidget);
 
     final button = tester.widget<ElevatedButton>(
       find.byKey(const Key('start-operations-button')),
     );
-    expect(button.onPressed, isNull);
+    expect(button.onPressed, isNotNull);
   });
 
-  testWidgets('abre reemplazo con el mismo equipo seleccionado',
-      (tester) async {
+  testWidgets('abre reemplazo con el mismo equipo seleccionado', (
+    tester,
+  ) async {
     await pumpScreen(tester);
 
     await tester.drag(find.byType(ListView), const Offset(0, -400));
@@ -178,8 +181,9 @@ void main() {
     expect(find.text('Caja'), findsOneWidget);
   });
 
-  testWidgets('ejecuta cuatro operaciones respetando la primera elegida',
-      (tester) async {
+  testWidgets('ejecuta cuatro operaciones respetando la primera elegida', (
+    tester,
+  ) async {
     final launched = <OperationType>[];
     await tester.pumpWidget(
       MaterialApp(
@@ -193,10 +197,7 @@ void main() {
       ),
     );
 
-    for (final key in const [
-      'operation-vibration',
-      'operation-temperature',
-    ]) {
+    for (final key in const ['operation-vibration', 'operation-temperature']) {
       tester
           .widget<InkWell>(
             find.descendant(
@@ -229,8 +230,10 @@ void main() {
     await tester.pump();
     await tester.drag(find.byType(ListView), const Offset(0, -600));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Primero Temperatura'));
-    await tester.pump();
+    expect(
+      find.textContaining('El reemplazo se guardará primero'),
+      findsOneWidget,
+    );
     tester
         .widget<ElevatedButton>(
           find.byKey(const Key('start-operations-button')),
@@ -238,19 +241,19 @@ void main() {
         .onPressed!();
     await tester.pump();
 
-    expect(launched, [OperationType.temperature]);
+    expect(launched, [OperationType.replacement]);
     await tester.tap(find.text('Continuar con Vibracion'));
     await tester.pump();
-    expect(launched, [OperationType.temperature, OperationType.vibration]);
-    await tester.tap(find.text('Continuar con Alineación'));
+    expect(launched, [OperationType.replacement, OperationType.vibration]);
+    await tester.tap(find.text('Continuar con Medición de temperatura'));
     await tester.pump();
-    await tester.tap(find.text('Continuar con Reemplazo de equipo'));
+    await tester.tap(find.text('Continuar con Alineación'));
     await tester.pumpAndSettle();
     expect(launched, [
-      OperationType.temperature,
-      OperationType.vibration,
-      OperationType.alignment,
       OperationType.replacement,
+      OperationType.vibration,
+      OperationType.temperature,
+      OperationType.alignment,
     ]);
   });
 }

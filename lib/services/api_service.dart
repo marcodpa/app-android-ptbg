@@ -3,6 +3,8 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
 import '../models/temperature_measurement.dart';
+import '../models/lubrication_measurement.dart';
+import '../models/component_catalog.dart';
 
 Map<String, dynamic> buildMedicionSyncPayload(MedicionLocal m) {
   return {
@@ -30,6 +32,24 @@ Map<String, dynamic> buildTemperatureSyncPayload(TemperatureMeasurement m) {
     'fecha': m.fecha,
     'hora': m.hora,
     for (var i = 1; i <= 10; i++) 'T$i': m.valores['T$i'] ?? 0.0,
+    'OBSERVACIONES': m.observaciones,
+    'USUARIO': m.responsable,
+    'CARGO': m.cargo,
+    'MARCA': m.marca,
+    'MODELO': m.modelo,
+    'SERIAL': m.serial,
+    'ODT': m.odt,
+  };
+}
+
+Map<String, dynamic> buildLubricationSyncPayload(LubricationMeasurement m) {
+  return {
+    'uuid': m.uuid,
+    'localizacion': m.localizacion,
+    'sistema': m.sistema,
+    'fecha': m.fecha,
+    'hora': m.hora,
+    for (var i = 1; i <= 9; i++) 'L$i': m.valores['L$i'],
     'OBSERVACIONES': m.observaciones,
     'USUARIO': m.responsable,
     'CARGO': m.cargo,
@@ -91,12 +111,13 @@ class ApiService {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(_tokenKey, data['access_token'].toString());
         await prefs.setString('username', username);
-        final responsable = (data['responsable'] ??
-                data['nombre'] ??
-                data['name'] ??
-                data['usuario'] ??
-                username)
-            .toString();
+        final responsable =
+            (data['responsable'] ??
+                    data['nombre'] ??
+                    data['name'] ??
+                    data['usuario'] ??
+                    username)
+                .toString();
         final cargo =
             (data['cargo'] ?? data['rol'] ?? data['role'] ?? 'MECANICO')
                 .toString();
@@ -121,10 +142,12 @@ class ApiService {
 
   Future<List<Map<String, String>>> fetchUsuarios() async {
     final url = await baseUrl;
-    final res = await http.get(
-      Uri.parse('$url/usuarios'),
-      headers: {'Accept': 'application/json'},
-    ).timeout(const Duration(seconds: 10));
+    final res = await http
+        .get(
+          Uri.parse('$url/usuarios'),
+          headers: {'Accept': 'application/json'},
+        )
+        .timeout(const Duration(seconds: 10));
 
     if (res.statusCode != 200) {
       throw Exception('Error al obtener usuarios: HTTP ${res.statusCode}');
@@ -137,13 +160,15 @@ class ApiService {
         .map((item) {
           final map = Map<String, dynamic>.from(item);
           return {
-            'usuario': (map['usuario'] ??
-                    map['username'] ??
-                    map['responsable'] ??
-                    map['nombre'] ??
-                    '')
-                .toString(),
+            'usuario':
+                (map['usuario'] ??
+                        map['username'] ??
+                        map['responsable'] ??
+                        map['nombre'] ??
+                        '')
+                    .toString(),
             'cargo': (map['cargo'] ?? 'MECANICO').toString(),
+            'rol': (map['rol'] ?? '').toString(),
           };
         })
         .where((item) => item['usuario']!.trim().isNotEmpty)
@@ -155,21 +180,20 @@ class ApiService {
     final url = await baseUrl;
     final headers = await _headers;
     final res = await http
-        .get(
-          Uri.parse('$url/equipos'),
-          headers: headers,
-        )
+        .get(Uri.parse('$url/equipos'), headers: headers)
         .timeout(const Duration(seconds: 20));
 
     if (res.statusCode != 200) {
       throw Exception(
-          'Error al obtener equipos: HTTP ${res.statusCode} ${res.body}');
+        'Error al obtener equipos: HTTP ${res.statusCode} ${res.body}',
+      );
     }
 
     final decoded = jsonDecode(res.body);
     if (decoded is! List) {
       throw Exception(
-          'La respuesta de /equipos no es una lista JSON. Respuesta: ${res.body}');
+        'La respuesta de /equipos no es una lista JSON. Respuesta: ${res.body}',
+      );
     }
 
     return decoded
@@ -178,15 +202,46 @@ class ApiService {
         .toList();
   }
 
+  // ── CATALOGO DE PIEZAS ────────────────────────────────────────────────
+  /// Piezas de un tipo (1 Motor, 2 Bomba, 3 Caja, 4 Ventilador) que ya se han
+  /// usado en algun equipo, para poder reasignarlas en vez de re-escribirlas.
+  ///
+  /// Incluye las que estan instaladas ahora mismo, marcadas con su ubicacion:
+  /// la pantalla las muestra igual pero avisa antes de moverlas.
+  Future<List<ComponentCatalogItem>> fetchComponentCatalog(int tipo) async {
+    final url = await baseUrl;
+    final headers = await _headers;
+    final res = await http
+        .get(Uri.parse('$url/componentes/$tipo'), headers: headers)
+        // Corto a proposito: si no hay señal se cae rapido a la copia local
+        // en vez de dejar al tecnico esperando frente al selector.
+        .timeout(const Duration(seconds: 8));
+
+    if (res.statusCode != 200) {
+      throw Exception(
+        'Error al obtener el catalogo de piezas: HTTP ${res.statusCode}',
+      );
+    }
+
+    final decoded = jsonDecode(res.body);
+    if (decoded is! Map || decoded['piezas'] is! List) {
+      throw Exception('La respuesta de /componentes/$tipo no tiene "piezas"');
+    }
+
+    return (decoded['piezas'] as List)
+        .whereType<Map>()
+        .map((j) =>
+            ComponentCatalogItem.fromJson(tipo, Map<String, dynamic>.from(j)))
+        .where((item) => item.serial.trim().isNotEmpty)
+        .toList();
+  }
+
   Future<Equipo?> fetchEquipoByQr(String qrCode) async {
     final url = await baseUrl;
     final headers = await _headers;
     final encoded = Uri.encodeComponent(qrCode);
     final res = await http
-        .get(
-          Uri.parse('$url/equipos/$encoded'),
-          headers: headers,
-        )
+        .get(Uri.parse('$url/equipos/$encoded'), headers: headers)
         .timeout(const Duration(seconds: 10));
 
     if (res.statusCode == 200) {
@@ -199,16 +254,15 @@ class ApiService {
     final url = await baseUrl;
     final headers = await _headers;
     final res = await http
-        .get(
-          Uri.parse('$url/equipo-info/$localizacion'),
-          headers: headers,
-        )
+        .get(Uri.parse('$url/equipo-info/$localizacion'), headers: headers)
         .timeout(const Duration(seconds: 10));
 
     if (res.statusCode == 200) {
       final data = Map<String, dynamic>.from(jsonDecode(res.body));
-      final info =
-          EquipoInfo.fromJson(data, fallbackLocalizacion: localizacion);
+      final info = EquipoInfo.fromJson(
+        data,
+        fallbackLocalizacion: localizacion,
+      );
       return info.isEmpty ? null : info;
     }
 
@@ -219,10 +273,7 @@ class ApiService {
     final url = await baseUrl;
     final headers = await _headers;
     final res = await http
-        .get(
-          Uri.parse('$url/debug-pt-eq'),
-          headers: headers,
-        )
+        .get(Uri.parse('$url/debug-pt-eq'), headers: headers)
         .timeout(const Duration(seconds: 10));
 
     if (res.statusCode != 200) return [];
@@ -247,7 +298,8 @@ class ApiService {
           .timeout(const Duration(seconds: 8));
       if (res.statusCode == 200) {
         return UltimaLectura.fromJson(
-            Map<String, dynamic>.from(jsonDecode(res.body)));
+          Map<String, dynamic>.from(jsonDecode(res.body)),
+        );
       }
     } catch (_) {}
     return null;
@@ -257,21 +309,20 @@ class ApiService {
     final url = await baseUrl;
     final headers = await _headers;
     final res = await http
-        .get(
-          Uri.parse('$url/ultimas-mediciones'),
-          headers: headers,
-        )
+        .get(Uri.parse('$url/ultimas-mediciones'), headers: headers)
         .timeout(const Duration(seconds: 20));
 
     if (res.statusCode != 200) {
       throw Exception(
-          'Error al obtener últimas mediciones: HTTP ${res.statusCode} ${res.body}');
+        'Error al obtener últimas mediciones: HTTP ${res.statusCode} ${res.body}',
+      );
     }
 
     final decoded = jsonDecode(res.body);
     if (decoded is! List) {
       throw Exception(
-          'La respuesta de /ultimas-mediciones no es una lista JSON. Respuesta: ${res.body}');
+        'La respuesta de /ultimas-mediciones no es una lista JSON. Respuesta: ${res.body}',
+      );
     }
 
     return decoded
@@ -342,9 +393,7 @@ class ApiService {
     }
   }
 
-  Future<TemperatureReading?> fetchLatestTemperature(
-    int localizacion,
-  ) async {
+  Future<TemperatureReading?> fetchLatestTemperature(int localizacion) async {
     final url = await baseUrl;
     final headers = await _headers;
     final res = await http
@@ -363,6 +412,68 @@ class ApiService {
     return TemperatureReading.fromJson(
       Map<String, dynamic>.from(jsonDecode(res.body)),
     );
+  }
+
+  Future<SyncResult> syncLubrication(LubricationMeasurement measurement) async {
+    try {
+      final url = await baseUrl;
+      final headers = await _headers;
+      final res = await http
+          .post(
+            Uri.parse('$url/lubricaciones'),
+            headers: headers,
+            body: jsonEncode(buildLubricationSyncPayload(measurement)),
+          )
+          .timeout(const Duration(seconds: 15));
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        return SyncResult.ok(measurement.uuid);
+      }
+      if (res.statusCode == 401) {
+        await logout();
+        return SyncResult.error(
+          measurement.uuid,
+          'Sesion vencida. Inicie sesion de nuevo y vuelva a sincronizar.',
+        );
+      }
+      return SyncResult.error(
+        measurement.uuid,
+        'HTTP ${res.statusCode} ${res.body}',
+      );
+    } catch (error) {
+      return SyncResult.error(measurement.uuid, error.toString());
+    }
+  }
+
+  Future<List<LubricationReading>> fetchLubricationHistory({
+    int? localizacion,
+    int limit = 50,
+  }) async {
+    final url = await baseUrl;
+    final headers = await _headers;
+    final query = <String, String>{
+      'limit': '$limit',
+      if (localizacion != null) 'localizacion': '$localizacion',
+    };
+    final path = Uri(path: '/lubricaciones', queryParameters: query);
+    final res = await http
+        .get(Uri.parse('$url$path'), headers: headers)
+        .timeout(const Duration(seconds: 20));
+    if (res.statusCode != 200) {
+      throw Exception(
+        'Error al obtener lubricaciones: HTTP ${res.statusCode} ${res.body}',
+      );
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is! List) {
+      throw Exception('La respuesta de lubricaciones no es una lista JSON.');
+    }
+    return decoded
+        .whereType<Map>()
+        .map(
+          (row) =>
+              LubricationMeasurement.fromMap(Map<String, dynamic>.from(row)),
+        )
+        .toList();
   }
 
   Future<List<TemperatureReading>> fetchLatestTemperatures({
@@ -401,9 +512,9 @@ class ApiService {
     }
     return decoded
         .whereType<Map>()
-        .map((row) => TemperatureReading.fromJson(
-              Map<String, dynamic>.from(row),
-            ))
+        .map(
+          (row) => TemperatureReading.fromJson(Map<String, dynamic>.from(row)),
+        )
         .toList();
   }
 
@@ -423,13 +534,15 @@ class ApiService {
   Future<List<Map<String, dynamic>>> getUltimasMediciones(String token) async {
     try {
       final url = await baseUrl;
-      final res = await http.get(
-        Uri.parse('$url/ultimas-mediciones'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-      ).timeout(const Duration(seconds: 15));
+      final res = await http
+          .get(
+            Uri.parse('$url/ultimas-mediciones'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+          )
+          .timeout(const Duration(seconds: 15));
       if (res.statusCode == 200) {
         final decoded = jsonDecode(res.body);
         if (decoded is List) {
@@ -451,21 +564,19 @@ class LoginResult {
   final String? responsable;
   final String? cargo;
   LoginResult.success(this.token, {this.responsable, this.cargo})
-      : ok = true,
-        error = null;
+    : ok = true,
+      error = null;
   LoginResult.failure(this.error)
-      : ok = false,
-        token = null,
-        responsable = null,
-        cargo = null;
+    : ok = false,
+      token = null,
+      responsable = null,
+      cargo = null;
 }
 
 class SyncResult {
   final bool ok;
   final String uuid;
   final String? error;
-  SyncResult.ok(this.uuid)
-      : ok = true,
-        error = null;
+  SyncResult.ok(this.uuid) : ok = true, error = null;
   SyncResult.error(this.uuid, this.error) : ok = false;
 }

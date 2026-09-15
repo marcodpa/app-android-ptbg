@@ -1,28 +1,21 @@
 @echo off
-title SCV-PTBG — Build APK Android
-color 0B
+setlocal
+title SCV-PTBG - Build APK Android
 
-echo.
-echo ================================================
-echo   SCV-PTBG — Compilando APK Android
-echo ================================================
-echo.
+set "PROJECT=%~dp0"
+set "FLUTTER=flutter"
+if exist "C:\flutter\bin\flutter.bat" set "FLUTTER=C:\flutter\bin\flutter.bat"
+if exist "%USERPROFILE%\Documents\Codex\.tools\flutter\bin\flutter.bat" set "FLUTTER=%USERPROFILE%\Documents\Codex\.tools\flutter\bin\flutter.bat"
+if exist "%USERPROFILE%\Documents\Codex\.tools\flutter_git\bin\flutter.bat" set "FLUTTER=%USERPROFILE%\Documents\Codex\.tools\flutter_git\bin\flutter.bat"
 
-set FLUTTER=C:\flutter\bin\flutter.bat
-set PROJECT=C:\Users\home-it\Downloads\scv_ptbg_flutter\scv_ptbg
+cd /d "%PROJECT%"
+echo Actualizando el catalogo del APK desde MariaDB...
+py -3 actualizar_catalogo_apk.py
+if errorlevel 1 exit /b 1
+call "%FLUTTER%" pub get
+if errorlevel 1 exit /b 1
+call "%FLUTTER%" build apk --release
+if errorlevel 1 exit /b 1
 
-cd /d %PROJECT%
-
-echo Compilando APK...
-call %FLUTTER% build apk --release
-if errorlevel 1 ( echo ERROR en build APK & pause & exit )
-
-echo.
-echo ================================================
-echo   APK generado en:
-echo   build\app\outputs\flutter-apk\app-release.apk
-echo ================================================
-echo.
-
-explorer build\app\outputs\flutter-apk\
-pause
+echo APK generado en:
+echo %PROJECT%build\app\outputs\flutter-apk\app-release.apk

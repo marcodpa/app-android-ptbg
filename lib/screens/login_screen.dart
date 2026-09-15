@@ -1,7 +1,9 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../theme.dart';
+import '../widgets/industrial_header_style.dart';
 import '../db/db_helper.dart';
+import '../models/sesion.dart';
 import '../services/api_service.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -89,19 +91,36 @@ class _LoginScreenState extends State<LoginScreen>
     return usuario.toLowerCase() == 'admin' ? 'ADMIN' : 'MECANICO';
   }
 
+  /// El ROL tal cual viene de MDB_USERS ('ADMIN' o 'USUARIO').
+  String _rolSeleccionado(String usuario) {
+    final key = usuario.trim().toUpperCase();
+    for (final item in _usuarios) {
+      if ((item['usuario'] ?? '').trim().toUpperCase() == key) {
+        return (item['rol'] ?? '').trim();
+      }
+    }
+    return '';
+  }
+
   Future<void> _login() async {
     final user = _userCtrl.text.trim();
     if (user.isEmpty) {
       setState(() => _error = 'Seleccione usuario');
       return;
     }
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     final cargo = _cargoSeleccionado(user);
+    final rolPlanta = _rolSeleccionado(user);
     await _go(
       user,
       cargo,
       username: user,
-      rol: user.toLowerCase() == 'admin' ? 'admin' : 'mecanico',
+      rol: Sesion.esUsuarioAdmin(user, cargo, rol: rolPlanta)
+          ? 'admin'
+          : 'mecanico',
     );
   }
 
@@ -132,22 +151,35 @@ class _LoginScreenState extends State<LoginScreen>
       children: [
         // Fondo oscuro top
         Positioned(
-          top: 0, left: 0, right: 0, height: h * 0.45,
-          child: Container(color: AppColors.primary),
+          top: 0,
+          left: 0,
+          right: 0,
+          height: h * 0.45,
+          child: const DecoratedBox(
+              decoration:
+                  BoxDecoration(gradient: IndustrialHeaderStyle.gradient)),
         ),
         // Fondo claro bottom
         Positioned(
-          top: h * 0.45, left: 0, right: 0, bottom: 0,
+          top: h * 0.45,
+          left: 0,
+          right: 0,
+          bottom: 0,
           child: Container(color: AppColors.bg),
         ),
         // Patron tecnico
         Positioned(
-          top: 0, left: 0, right: 0, height: h * 0.45,
+          top: 0,
+          left: 0,
+          right: 0,
+          height: h * 0.45,
           child: CustomPaint(painter: _CircuitPainter()),
         ),
         // Franja naranja
         Positioned(
-          top: h * 0.44, left: 0, right: 0,
+          top: h * 0.44,
+          left: 0,
+          right: 0,
           child: Container(height: 3, color: AppColors.orange),
         ),
         // Contenido principal
@@ -167,14 +199,17 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Widget _buildLogo() {
-    return SizedBox(
+    return Container(
       height: 130,
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      decoration: IndustrialHeaderStyle.decoration,
       child: Center(
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 50, height: 50,
+              width: 50,
+              height: 50,
               decoration: BoxDecoration(
                 color: AppColors.orange,
                 borderRadius: BorderRadius.circular(13),
@@ -184,27 +219,26 @@ class _LoginScreenState extends State<LoginScreen>
                   color: Colors.white, size: 28),
             ),
             const SizedBox(width: 14),
-            Column(
+            Flexible(
+                child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('SCV-PTBG',
-                  style: TextStyle(
+                Text(
+                  'STER',
+                  style: AppText.display.copyWith(
                     color: Colors.white,
-                    fontSize: 28,
-                    fontWeight: FontWeight.w900,
                     letterSpacing: 2,
                   ),
                 ),
-                Text('Captura de Vibraciones PTBG',
-                  style: TextStyle(
-                    color: AppColors.orange.withValues(alpha: 0.9),
-                    fontSize: 11,
-                    letterSpacing: 0.5,
-                  ),
+                const Text(
+                  'Trazabilidad de equipos rotativos · PTBG',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: IndustrialHeaderStyle.subtitle,
                 ),
               ],
-            ),
+            )),
           ],
         ),
       ),
@@ -219,8 +253,8 @@ class _LoginScreenState extends State<LoginScreen>
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(24),
           boxShadow: AppColors.shadowLg,
-          border: const Border(
-              top: BorderSide(color: AppColors.orange, width: 3)),
+          border:
+              const Border(top: BorderSide(color: AppColors.orange, width: 3)),
         ),
         padding: const EdgeInsets.all(28),
         child: Column(
@@ -231,27 +265,25 @@ class _LoginScreenState extends State<LoginScreen>
             Row(
               children: [
                 Container(
-                  width: 4, height: 22,
+                  width: 4,
+                  height: 22,
                   decoration: BoxDecoration(
                     color: AppColors.orange,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
                 const SizedBox(width: 10),
-                const Text('Acceso al sistema',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
-                  ),
+                Text(
+                  'Acceso al sistema',
+                  style: AppText.titulo.copyWith(color: AppColors.textPrimary),
                 ),
               ],
             ),
-            const Padding(
-              padding: EdgeInsets.only(left: 14, top: 2),
+            Padding(
+              padding: const EdgeInsets.only(left: 14, top: 2),
               child: Text('Personal autorizado PTBG',
-                style: TextStyle(
-                    fontSize: 12, color: AppColors.textSecondary)),
+                  style: AppText.subtitulo
+                      .copyWith(color: AppColors.textSecondary)),
             ),
 
             // Error
@@ -263,8 +295,8 @@ class _LoginScreenState extends State<LoginScreen>
                 decoration: BoxDecoration(
                   color: AppColors.errorBg,
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                      color: AppColors.error.withValues(alpha: 0.3)),
+                  border:
+                      Border.all(color: AppColors.error.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   children: [
@@ -273,8 +305,8 @@ class _LoginScreenState extends State<LoginScreen>
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(_error!,
-                        style: const TextStyle(
-                            fontSize: 12, color: AppColors.error)),
+                          style:
+                              AppText.apoyo.copyWith(color: AppColors.error)),
                     ),
                   ],
                 ),
@@ -285,7 +317,7 @@ class _LoginScreenState extends State<LoginScreen>
             const _Lbl('USUARIO'),
             const SizedBox(height: 6),
             DropdownButtonFormField<String>(
-              value: _selectedUsuario,
+              initialValue: _selectedUsuario,
               isExpanded: true,
               items: _usuarios.map((user) {
                 final usuario = user['usuario'] ?? '';
@@ -335,7 +367,8 @@ class _LoginScreenState extends State<LoginScreen>
                   children: [
                     if (_loading)
                       const SizedBox(
-                        width: 18, height: 18,
+                        width: 18,
+                        height: 18,
                         child: CircularProgressIndicator(
                             color: Colors.white, strokeWidth: 2.5),
                       )
@@ -345,11 +378,7 @@ class _LoginScreenState extends State<LoginScreen>
                     const SizedBox(width: 10),
                     Text(
                       _loading ? 'Verificando...' : 'Ingresar',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                      ),
+                      style: AppText.seccion.copyWith(color: Colors.white),
                     ),
                   ],
                 ),
@@ -363,14 +392,12 @@ class _LoginScreenState extends State<LoginScreen>
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Text('o',
-                    style: TextStyle(
-                        color: AppColors.textHint, fontSize: 12)),
+                      style: AppText.apoyo.copyWith(color: AppColors.textHint)),
                 ),
                 const Expanded(child: Divider(color: AppColors.border)),
               ],
             ),
             const SizedBox(height: 12),
-
           ],
         ),
       ),
@@ -383,12 +410,10 @@ class _Lbl extends StatelessWidget {
   const _Lbl(this.t);
   @override
   Widget build(BuildContext context) => Text(t,
-    style: const TextStyle(
-      fontSize: 10,
-      fontWeight: FontWeight.w700,
-      color: AppColors.textSecondary,
-      letterSpacing: 1.0,
-    ));
+      style: AppText.etiqueta.copyWith(
+        color: AppColors.textSecondary,
+        letterSpacing: 1.0,
+      ));
 }
 
 class _CircuitPainter extends CustomPainter {
@@ -413,6 +438,7 @@ class _CircuitPainter extends CustomPainter {
       }
     }
   }
+
   @override
   bool shouldRepaint(_) => false;
 }

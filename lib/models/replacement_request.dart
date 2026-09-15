@@ -1,11 +1,49 @@
 import 'models.dart';
 import 'operation_flow.dart';
 
+/// Danos que se registran al reemplazar una pieza.
+///
+/// Es una lista cerrada a proposito: con texto libre el mismo dano termina
+/// escrito de cuatro formas distintas y despues no se puede agrupar.
+/// Estatus que un tecnico puede asignar a mano.
+///
+/// INSTALADO no esta: que una pieza este puesta en un equipo lo decide el
+/// reemplazo, nunca una eleccion manual.
+const estadosPieza = <String>[
+  'DISPONIBLE',
+  'AVERIADO',
+  'DESECHADO',
+];
+
+/// Donde queda fisicamente una pieza que sale de un equipo.
+const sitiosPieza = <String>[
+  'TALLER ELECTRICO',
+  'TALLER MECANICO',
+  'TALLER EXTERNO',
+  'ALMACEN PRINCIPAL',
+  'ALMACEN DE MOTORES',
+];
+
+const danosReemplazo = <String>[
+  'Rodamiento',
+  'Bobinado',
+  'Sello mecanico',
+  'Eje',
+  'Impulsor',
+  'Acople',
+  'Ventilador de enfriamiento',
+  'Fin de vida util',
+  'Otro',
+];
+
 class ReplacementData {
   const ReplacementData({
     required this.brand,
     required this.model,
     required this.serial,
+    this.motivo,
+    this.estadoSaliente,
+    this.sitioSaliente,
     this.updateTechnicalSpecs = false,
     this.voltage = '',
     this.current = '',
@@ -25,6 +63,16 @@ class ReplacementData {
   final String brand;
   final String model;
   final String serial;
+
+  /// Que se dano en la pieza que sale. Va a MOT_LOG_RPL.MOTIVO.
+  final String? motivo;
+
+  /// Con que estatus queda la pieza que SALE del equipo. Lo elige el tecnico:
+  /// solo el sabe si el motor retirado quedo averiado, sirve o se desecha.
+  final String? estadoSaliente;
+
+  /// A donde va fisicamente la pieza que sale: taller o almacen.
+  final String? sitioSaliente;
   final bool updateTechnicalSpecs;
   final String voltage;
   final String current;
@@ -44,6 +92,9 @@ class ReplacementData {
         'marca': brand.trim(),
         'modelo': model.trim(),
         'serial': serial.trim(),
+        'motivo': motivo,
+        'estado_saliente': estadoSaliente,
+        'sitio_saliente': sitioSaliente,
         'actualizar_especificaciones': updateTechnicalSpecs ? 1 : 0,
         'voltaje': voltage.trim(),
         'corriente': current.trim(),
@@ -70,14 +121,17 @@ class ReplacementRequest {
   const ReplacementRequest({
     required this.equipo,
     required this.components,
+    this.odt,
   });
 
   final Equipo equipo;
   final Map<ReplacementComponent, ReplacementData> components;
+  final int? odt;
 
   Map<String, dynamic> toJson() => {
         'localizacion': equipo.localizacion,
         'code_conjunto': equipo.codeSys,
+        'odt': odt,
         'componentes': components.entries
             .map((entry) => entry.value.toJson(entry.key))
             .toList(),
@@ -140,6 +194,7 @@ class ReplacementLocalItem {
     this.tension = '',
     this.lubrication = '',
     this.errorSync,
+    this.synchronized = false,
   });
 
   final String uuid;
@@ -162,6 +217,7 @@ class ReplacementLocalItem {
   final String tension;
   final String lubrication;
   final String? errorSync;
+  final bool synchronized;
 
   factory ReplacementLocalItem.fromMap(Map<String, dynamic> map) {
     return ReplacementLocalItem(
@@ -185,6 +241,7 @@ class ReplacementLocalItem {
       tension: (map['tension'] ?? '').toString(),
       lubrication: (map['lubricacion'] ?? '').toString(),
       errorSync: map['error_sync']?.toString(),
+      synchronized: _asInt(map['sincronizado']) == 1,
     );
   }
 
@@ -217,6 +274,7 @@ class ReplacementLocalOperation {
     required this.fecha,
     required this.hora,
     required this.components,
+    this.odt,
   });
 
   final String operationUuid;
@@ -225,6 +283,10 @@ class ReplacementLocalOperation {
   final String fecha;
   final String hora;
   final List<ReplacementLocalItem> components;
+  final int? odt;
+
+  bool get synchronized =>
+      components.isNotEmpty && components.every((item) => item.synchronized);
 
   bool get hasError => components.any(
         (item) => item.errorSync != null && item.errorSync!.trim().isNotEmpty,
@@ -252,6 +314,7 @@ class ReplacementLocalOperation {
         codeConjunto: _asInt(first['code_conjunto']),
         fecha: (first['fecha'] ?? '').toString(),
         hora: (first['hora'] ?? '').toString(),
+        odt: first['odt'] == null ? null : _asInt(first['odt']),
         components: entry.value
             .map(ReplacementLocalItem.fromMap)
             .toList(growable: false),

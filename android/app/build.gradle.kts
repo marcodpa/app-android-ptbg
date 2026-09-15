@@ -27,8 +27,9 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
+            // El flujo oficial USB usa `adb run-as` para extraer y devolver la
+            // base SQLite sin root ni almacenamiento público.
+            isDebuggable = true
             signingConfig = signingConfigs.getByName("debug")
         }
     }

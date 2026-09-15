@@ -9,7 +9,10 @@ import '../models/equipo_visual_config.dart';
 import '../services/api_service.dart';
 import '../services/equipo_service.dart';
 import '../theme.dart';
+import '../widgets/industrial_navigation.dart';
+import 'checklist_compresor_screen.dart';
 import 'operation_selection_screen.dart';
+import '../widgets/decode_imagen.dart';
 
 class QrScreen extends StatefulWidget {
   const QrScreen({super.key});
@@ -227,6 +230,18 @@ class _QrScreenState extends State<QrScreen> {
   void _iniciarMedicion() {
     final eq = _found;
     if (eq == null) return;
+    // Un compresor no se mide: se le llena el check list. Se enruta aqui y no
+    // en la pantalla de operaciones porque alli ya seria tarde, el tecnico
+    // habria visto una lista de servicios que no le aplican.
+    if (EquipoService.instance.esCompresorDeAire(eq)) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChecklistCompresorScreen(compresor: eq),
+        ),
+      );
+      return;
+    }
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -239,101 +254,31 @@ class _QrScreenState extends State<QrScreen> {
   Widget build(BuildContext context) {
     final equipoEncontrado = _found;
 
-    return Scaffold(
-      backgroundColor: AppColors.headerTop,
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView(
-              padding: EdgeInsets.zero,
-              physics: const BouncingScrollPhysics(),
-              children: [
-                _buildHeader(),
-                _buildScannerCard(),
-                _buildInstructionRow(),
-                if (_notFound) _buildNotFoundBox(),
-                if (equipoEncontrado != null)
-                  _buildEquipmentCard(equipoEncontrado),
-                _buildPrimaryButton(),
-                _buildManualButton(),
-                if (_showManual) _buildManualInput(),
-                const SizedBox(height: 18),
-              ],
+    return IndustrialShell(
+      activeRoute: '/qr',
+      child: Scaffold(
+        backgroundColor: esterThemeController.isDark
+            ? AppColors.bg
+            : const Color(0xFFF7FAFE),
+        body: ListView(
+          padding: EdgeInsets.zero,
+          physics: const BouncingScrollPhysics(),
+          children: [
+            const IndustrialContentHeader(
+              title: 'Escanear QR',
+              subtitle: 'Identifique el equipo para iniciar el trabajo',
+              icon: Icons.qr_code_scanner_rounded,
             ),
-          ),
-          _buildBottomNav(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return Container(
-      height: 172,
-      decoration: const BoxDecoration(gradient: AppColors.gradPrimary),
-      child: Stack(
-        children: [
-          Positioned.fill(
-              child: CustomPaint(painter: _IndustrialHeaderPainter())),
-          SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(18, 16, 18, 0),
-              child: Row(
-                children: [
-                  GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: Container(
-                      width: 58,
-                      height: 58,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.05),
-                        ),
-                      ),
-                      child: const Icon(
-                        Icons.arrow_back_rounded,
-                        color: Colors.white,
-                        size: 32,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 18),
-                  const Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Escanear QR',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 34,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 1.8,
-                          ),
-                        ),
-                        SizedBox(height: 2),
-                        Text(
-                          'Capture el código QR del equipo',
-                          style: TextStyle(
-                            color: Color(0xFF7EE2D8),
-                            fontSize: 15,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
+            _buildScannerCard(),
+            _buildInstructionRow(),
+            if (_notFound) _buildNotFoundBox(),
+            if (equipoEncontrado != null) _buildEquipmentCard(equipoEncontrado),
+            _buildPrimaryButton(),
+            _buildManualButton(),
+            if (_showManual) _buildManualInput(),
+            const SizedBox(height: 18),
+          ],
+        ),
       ),
     );
   }
@@ -347,7 +292,9 @@ class _QrScreenState extends State<QrScreen> {
       height: cardHeight,
       margin: const EdgeInsets.fromLTRB(18, 0, 18, 0),
       decoration: BoxDecoration(
-        color: const Color(0xFFE5E7EB),
+        color: esterThemeController.isDark
+            ? AppColors.surface
+            : const Color(0xFFEAF2FB),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: AppColors.teal.withValues(alpha: 0.28),
@@ -419,7 +366,9 @@ class _QrScreenState extends State<QrScreen> {
     return GestureDetector(
       onTap: showTapText ? _toggleCam : null,
       child: Container(
-        color: const Color(0xFFE5E7EB),
+        color: esterThemeController.isDark
+            ? AppColors.surface2
+            : const Color(0xFFEAF2FB),
         child: Stack(
           fit: StackFit.expand,
           children: [
@@ -436,7 +385,9 @@ class _QrScreenState extends State<QrScreen> {
                   vertical: 20,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.94),
+                  color: esterThemeController.isDark
+                      ? AppColors.surface
+                      : Colors.white,
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
                     color: AppColors.borderDark,
@@ -466,24 +417,18 @@ class _QrScreenState extends State<QrScreen> {
                       ),
                     ),
                     const SizedBox(height: 14),
-                    const Text(
+                    Text(
                       'Activar cámara',
                       textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                      ),
+                      style: AppText.titulo
+                          .copyWith(color: AppColors.textPrimary),
                     ),
                     const SizedBox(height: 6),
-                    const Text(
+                    Text(
                       'Toque aquí para escanear el código QR del equipo',
                       textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 12,
-                        height: 1.25,
-                      ),
+                      style: AppText.subtitulo
+                          .copyWith(color: AppColors.textSecondary),
                     ),
                   ],
                 ),
@@ -506,22 +451,19 @@ class _QrScreenState extends State<QrScreen> {
                       color: AppColors.error.withValues(alpha: 0.35),
                     ),
                   ),
-                  child: const Row(
+                  child: Row(
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.error_outline_rounded,
                         color: AppColors.error,
                         size: 18,
                       ),
-                      SizedBox(width: 8),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'No se pudo abrir la cámara. Revise los permisos de Android.',
-                          style: TextStyle(
-                            color: AppColors.error,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                          ),
+                          style:
+                              AppText.apoyo.copyWith(color: AppColors.error),
                         ),
                       ),
                     ],
@@ -558,10 +500,10 @@ class _QrScreenState extends State<QrScreen> {
             child: Text(
               'Alinee el código QR del equipo dentro del recuadro',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.9),
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
+              style: AppText.cuerpo.copyWith(
+                color: esterThemeController.isDark
+                    ? AppColors.textPrimary
+                    : const Color(0xFF123A68),
               ),
             ),
           ),
@@ -580,18 +522,15 @@ class _QrScreenState extends State<QrScreen> {
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: AppColors.error.withValues(alpha: 0.35)),
         ),
-        child: const Row(
+        child: Row(
           children: [
-            Icon(Icons.error_outline_rounded, color: AppColors.error, size: 18),
-            SizedBox(width: 8),
+            const Icon(Icons.error_outline_rounded,
+                color: AppColors.error, size: 18),
+            const SizedBox(width: 8),
             Expanded(
               child: Text(
                 'Código no encontrado. Verifique el QR o ingrese el código manualmente.',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: AppColors.error,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: AppText.apoyo.copyWith(color: AppColors.error),
               ),
             ),
           ],
@@ -611,12 +550,14 @@ class _QrScreenState extends State<QrScreen> {
     final serial = _cleanInfoPreview(info?.serial, fallback: 'Sin serial');
     final modelo = _cleanInfoPreview(info?.modelo, fallback: 'Sin modelo');
     final marca = _cleanInfoPreview(info?.marca, fallback: 'Sin marca');
+    final dark = esterThemeController.isDark;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(18, 16, 18, 0),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: dark ? AppColors.surface : Colors.white,
+        border: dark ? null : Border.all(color: const Color(0xFFE2E8F0)),
         borderRadius: BorderRadius.circular(18),
         boxShadow: AppColors.shadowLg,
       ),
@@ -641,6 +582,7 @@ class _QrScreenState extends State<QrScreen> {
                       width: 82,
                       height: 82,
                       fit: BoxFit.contain,
+                      cacheWidth: anchoDecode(context, anchoLogico: 82),
                       errorBuilder: (_, __, ___) => const Icon(
                         Icons.precision_manufacturing_outlined,
                         color: AppColors.teal,
@@ -683,10 +625,9 @@ class _QrScreenState extends State<QrScreen> {
                   eq.equipo,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w900,
+                  style: AppText.seccion.copyWith(
+                    color:
+                        dark ? AppColors.textPrimary : const Color(0xFF111827),
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -742,26 +683,6 @@ class _QrScreenState extends State<QrScreen> {
     return v;
   }
 
-  String _areaDisplay(Equipo eq) {
-    final s = eq.sistema.toUpperCase();
-    if (s.contains('BG-1')) return 'Turbina BG1';
-    if (s.contains('BG-2')) return 'Turbina BG2';
-    if (s.contains('FUEL')) return 'Área Combustible';
-    if (s.contains('DESMINERALIZED')) return 'Planta DEMI';
-    if (s.contains('CENTRIFUGADORAS')) return 'Centrifugadoras';
-    if (s.contains('AGUA POTABLE')) return 'Agua Potable';
-    return eq.sistema;
-  }
-
-  String _sistemaDisplay(Equipo eq) {
-    final s = eq.sistema.toUpperCase();
-    if (s.contains('FUEL')) return 'Combustible';
-    if (s.contains('DESMINERALIZED')) return 'Agua desmineralizada';
-    if (s.contains('TURBINA')) return 'Turbina';
-    if (s.contains('S.C.I')) return 'Sistema contra incendio';
-    return eq.sistema;
-  }
-
   Widget _buildPrimaryButton() {
     final enabled = _found != null;
     final text = enabled
@@ -805,11 +726,7 @@ class _QrScreenState extends State<QrScreen> {
               const SizedBox(width: 12),
               Text(
                 text,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                ),
+                style: AppText.seccion.copyWith(color: Colors.white),
               ),
             ],
           ),
@@ -838,19 +755,16 @@ class _QrScreenState extends State<QrScreen> {
             border: Border.all(color: AppColors.borderDark),
             boxShadow: AppColors.shadowSm,
           ),
-          child: const Row(
+          child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.keyboard_rounded,
+              const Icon(Icons.keyboard_rounded,
                   color: AppColors.textPrimary, size: 22),
-              SizedBox(width: 12),
+              const SizedBox(width: 12),
               Text(
                 'Ingresar código manual',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textPrimary,
-                ),
+                style:
+                    AppText.seccion.copyWith(color: AppColors.textPrimary),
               ),
             ],
           ),
@@ -914,80 +828,6 @@ class _QrScreenState extends State<QrScreen> {
     );
   }
 
-  Widget _buildBottomNav() {
-    return Container(
-      height: 60 + MediaQuery.of(context).padding.bottom,
-      decoration: BoxDecoration(
-        color: const Color(0xFF06213A),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.30),
-            blurRadius: 16,
-            offset: const Offset(0, -4),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: Row(
-          children: [
-            Expanded(
-              child: GestureDetector(
-                onTap: () => Navigator.pushNamedAndRemoveUntil(
-                  context,
-                  '/home',
-                  (_) => false,
-                ),
-                child: const Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.home_rounded,
-                        color: Color(0xFF7EE2D8), size: 22),
-                    SizedBox(height: 2),
-                    Text(
-                      'Inicio',
-                      style: TextStyle(color: Color(0xFF7EE2D8), fontSize: 11),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            Container(
-              width: 46,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(4),
-              ),
-            ),
-            Expanded(
-              child: GestureDetector(
-                onTap: () => Navigator.pushNamed(context, '/ajustes'),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.settings_rounded,
-                      color: Colors.white.withValues(alpha: 0.72),
-                      size: 22,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Ajustes',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.72),
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _PreviewInfoBox extends StatelessWidget {
@@ -1003,6 +843,7 @@ class _PreviewInfoBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dark = esterThemeController.isDark;
     final noData = value.trim().isEmpty ||
         value.trim().toUpperCase() == 'NULL' ||
         value.trim().toUpperCase() == 'SIN DATOS';
@@ -1010,12 +851,22 @@ class _PreviewInfoBox extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
       decoration: BoxDecoration(
-        color: important ? AppColors.tealLight : AppColors.bg2,
+        // En modo noche el fondo destacado no puede ser el teal claro: el
+        // valor va casi blanco y quedaba blanco sobre claro, invisible.
+        color: important
+            ? (dark
+                ? AppColors.teal.withValues(alpha: 0.14)
+                : AppColors.tealLight)
+            : dark
+                ? AppColors.bg2
+                : const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(11),
         border: Border.all(
           color: important
               ? AppColors.teal.withValues(alpha: 0.28)
-              : AppColors.borderDark,
+              : dark
+                  ? AppColors.borderDark
+                  : const Color(0xFFE2E8F0),
         ),
       ),
       child: Column(
@@ -1026,10 +877,12 @@ class _PreviewInfoBox extends StatelessWidget {
             label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: important ? AppColors.teal : AppColors.textSecondary,
-              fontSize: 10,
-              fontWeight: FontWeight.w900,
+            style: AppText.micro.copyWith(
+              color: important
+                  ? (dark ? AppColors.teal : AppColors.tealDark)
+                  : dark
+                      ? AppColors.textSecondary
+                      : const Color(0xFF64748B),
             ),
           ),
           const SizedBox(height: 2),
@@ -1037,10 +890,14 @@ class _PreviewInfoBox extends StatelessWidget {
             noData ? '-' : value.trim(),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: noData ? AppColors.textHint : AppColors.textPrimary,
-              fontSize: important ? 12 : 11,
-              fontWeight: FontWeight.w900,
+            style: AppText.etiqueta.copyWith(
+              color: noData
+                  ? dark
+                      ? AppColors.textHint
+                      : const Color(0xFF94A3B8)
+                  : dark
+                      ? AppColors.textPrimary
+                      : const Color(0xFF111827),
             ),
           ),
         ],
@@ -1052,18 +909,20 @@ class _PreviewInfoBox extends StatelessWidget {
 class _AxisPreviewCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final dark = esterThemeController.isDark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
+        color: dark ? AppColors.bg2 : const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.borderDark),
+        border: Border.all(
+            color: dark ? AppColors.borderDark : const Color(0xFFE2E8F0)),
       ),
-      child: Row(
+      child: const Row(
         children: [
-          const Icon(Icons.threed_rotation_rounded,
+          Icon(Icons.threed_rotation_rounded,
               color: AppColors.teal, size: 17),
-          const SizedBox(width: 8),
+          SizedBox(width: 8),
           Expanded(
               child: _AxisPreviewItem(
                   axis: 'X', name: 'Horizontal', color: Colors.black)),
@@ -1089,6 +948,7 @@ class _AxisPreviewItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dark = esterThemeController.isDark;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1102,84 +962,12 @@ class _AxisPreviewItem extends StatelessWidget {
             '$axis $name',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 10,
-              fontWeight: FontWeight.w900,
+            style: AppText.micro.copyWith(
+              color: dark ? AppColors.textPrimary : const Color(0xFF334155),
             ),
           ),
         ),
       ],
-    );
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-  final Color? valueColor;
-  final bool bold;
-
-  const _InfoRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-    this.valueColor,
-    this.bold = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 34,
-          height: 34,
-          decoration: BoxDecoration(
-            color: AppColors.tealLight.withValues(alpha: 0.75),
-            borderRadius: BorderRadius.circular(9),
-          ),
-          child: Icon(icon, size: 17, color: AppColors.textPrimary),
-        ),
-        const SizedBox(width: 10),
-        SizedBox(
-          width: 64,
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.textSecondary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
-              color: valueColor ?? AppColors.textPrimary,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _SoftDivider extends StatelessWidget {
-  const _SoftDivider();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.only(left: 44, top: 7, bottom: 7),
-      child: Divider(height: 1, color: AppColors.border),
     );
   }
 }
@@ -1274,58 +1062,6 @@ class _ScanLineState extends State<_ScanLine>
   }
 }
 
-class _IndustrialHeaderPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final line = Paint()
-      ..color = Colors.white.withValues(alpha: 0.055)
-      ..strokeWidth = 1;
-    for (double y = 14; y < size.height; y += 18) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), line);
-    }
-
-    final plant = Paint()
-      ..color = const Color(0xFF67D8FF).withValues(alpha: 0.10)
-      ..style = PaintingStyle.fill;
-    final baseY = size.height * 0.72;
-    for (double x = size.width * 0.58; x < size.width; x += 42) {
-      canvas.drawRect(Rect.fromLTWH(x, baseY - 50, 10, 50), plant);
-      canvas.drawRect(Rect.fromLTWH(x - 8, baseY - 54, 26, 6), plant);
-      canvas.drawCircle(Offset(x + 5, baseY - 58), 13, plant);
-    }
-
-    final pipe = Paint()
-      ..color = const Color(0xFF67D8FF).withValues(alpha: 0.10)
-      ..strokeWidth = 5
-      ..strokeCap = StrokeCap.round;
-    canvas.drawLine(
-      Offset(size.width * 0.52, baseY),
-      Offset(size.width, baseY),
-      pipe,
-    );
-    canvas.drawLine(
-      Offset(size.width * 0.62, baseY + 18),
-      Offset(size.width, baseY + 18),
-      pipe,
-    );
-
-    final glow = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          AppColors.teal.withValues(alpha: 0.18),
-          Colors.transparent,
-        ],
-      ).createShader(Rect.fromCircle(
-        center: Offset(size.width * 0.92, 0),
-        radius: 120,
-      ));
-    canvas.drawCircle(Offset(size.width * 0.92, 0), 120, glow);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
 class _InactiveCameraPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
@@ -1377,48 +1113,6 @@ class _InactiveCameraPainter extends CustomPainter {
       74,
       ring,
     );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-class _IndustrialCameraPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final bgLine = Paint()
-      ..color = Colors.white.withValues(alpha: 0.045)
-      ..strokeWidth = 1;
-    for (double y = 18; y < size.height; y += 22) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), bgLine);
-    }
-
-    final pipe = Paint()
-      ..color = Colors.white.withValues(alpha: 0.10)
-      ..strokeWidth = 16
-      ..strokeCap = StrokeCap.round;
-    canvas.drawLine(
-      Offset(-20, size.height * 0.43),
-      Offset(size.width * 0.45, size.height * 0.43),
-      pipe,
-    );
-    canvas.drawLine(
-      Offset(size.width * 0.55, size.height * 0.70),
-      Offset(size.width + 20, size.height * 0.70),
-      pipe,
-    );
-
-    final soft = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          Colors.transparent,
-          AppColors.teal.withValues(alpha: 0.12),
-          Colors.transparent,
-        ],
-      ).createShader(Offset.zero & size);
-    canvas.drawRect(Offset.zero & size, soft);
   }
 
   @override

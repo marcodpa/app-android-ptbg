@@ -52,25 +52,20 @@ class AlignmentReferenceCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       'Referencia de alineación correcta',
-                      style: TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                      ),
+                      style: AppText.seccion
+                          .copyWith(color: AppColors.textPrimary),
                     ),
-                    SizedBox(height: 3),
+                    const SizedBox(height: 3),
                     Text(
                       'Los centros de todos los ejes coinciden',
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 12,
-                      ),
+                      style: AppText.subtitulo
+                          .copyWith(color: AppColors.textSecondary),
                     ),
                   ],
                 ),
@@ -84,21 +79,19 @@ class AlignmentReferenceCard extends StatelessWidget {
                   color: AppColors.successBg,
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.check_circle_rounded,
                       color: AppColors.success,
                       size: 14,
                     ),
-                    SizedBox(width: 4),
+                    const SizedBox(width: 4),
                     Text(
                       'COAXIAL',
-                      style: TextStyle(
+                      style: AppText.micro.copyWith(
                         color: AppColors.tealDark,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w900,
                         letterSpacing: .6,
                       ),
                     ),
@@ -146,23 +139,19 @@ class AlignmentReferenceCard extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 12),
-          const Row(
+          Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(
+              const Icon(
                 Icons.info_outline_rounded,
                 color: AppColors.textSecondary,
                 size: 16,
               ),
-              SizedBox(width: 7),
+              const SizedBox(width: 7),
               Expanded(
                 child: Text(
                   'Guía visual · no representa un diagnóstico calculado',
-                  style: TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 11,
-                    height: 1.3,
-                  ),
+                  style: AppText.apoyo.copyWith(color: AppColors.textSecondary),
                 ),
               ),
             ],
@@ -183,10 +172,8 @@ class _MachineLabel extends StatelessWidget {
     return Text(
       text,
       textAlign: TextAlign.center,
-      style: const TextStyle(
-        color: AppColors.headerTop,
-        fontSize: 10,
-        fontWeight: FontWeight.w900,
+      style: AppText.micro.copyWith(
+        color: AppColors.textPrimary,
         letterSpacing: 1.1,
       ),
     );
@@ -203,17 +190,13 @@ class _CouplingLabel extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
-        color: AppColors.tealLight,
+        color: AppColors.teal.withValues(alpha: .14),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
         text,
         textAlign: TextAlign.center,
-        style: const TextStyle(
-          color: AppColors.tealDark,
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-        ),
+        style: AppText.etiqueta.copyWith(color: AppColors.teal),
       ),
     );
   }

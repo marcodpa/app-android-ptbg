@@ -22,9 +22,13 @@ class EquipoService {
     _lastError = null;
 
     // Asegura que el catalogo OFFLINE incrustado (con los TAC reales) este en la
-    // tablet. Si habia un catalogo viejo guardado, lo reemplaza cuando sube la
-    // version. Esto es lo que permite escanear los QR sin conexion.
+    // tablet vacia. Nunca reemplaza un catalogo ya descargado por USB.
+    // Esto permite escanear los QR sin conexion desde la primera instalacion.
     await _sembrarCatalogoBaseSiHaceFalta();
+    if (!kIsWeb && await DbHelper.instance.migrarSeparadoresTipo10()) {
+      _cache = [];
+      _loaded = false;
+    }
 
     if (_loaded && !forceRefresh && _cache.isNotEmpty) return _cache;
 
@@ -47,11 +51,12 @@ class EquipoService {
         _loaded = true;
 
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('ultima_descarga', DateTime.now().toIso8601String());
+        await prefs.setString(
+            'ultima_descarga', DateTime.now().toIso8601String());
         await prefs.setInt('equipos_descargados', remote.length);
         await prefs.setInt(
           'equipos_sin_pt_eq',
-          remote.where((e) => e.ptEq < 1 || e.ptEq > 9).length,
+          remote.where((e) => e.ptEq < 1 || e.ptEq > 10).length,
         );
       }
     } catch (e) {
@@ -98,7 +103,8 @@ class EquipoService {
       if (descargarLecturas && !kIsWeb) {
         for (final eq in remote) {
           try {
-            final ul = await ApiService.instance.fetchUltimaLectura(eq.localizacion);
+            final ul =
+                await ApiService.instance.fetchUltimaLectura(eq.localizacion);
             if (ul != null) {
               await DbHelper.instance.upsertUltimaLectura(ul);
               lecturas++;
@@ -107,9 +113,10 @@ class EquipoService {
         }
       }
 
-      final sinPtEq = remote.where((e) => e.ptEq < 1 || e.ptEq > 9).length;
+      final sinPtEq = remote.where((e) => e.ptEq < 1 || e.ptEq > 10).length;
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('ultima_descarga', DateTime.now().toIso8601String());
+      await prefs.setString(
+          'ultima_descarga', DateTime.now().toIso8601String());
       await prefs.setInt('equipos_descargados', remote.length);
       await prefs.setInt('lecturas_descargadas', lecturas);
       await prefs.setInt('equipos_sin_pt_eq', sinPtEq);
@@ -140,17 +147,30 @@ class EquipoService {
 
   Future<List<Equipo>> _descargarDesdeServidor() async {
     final equipos = await ApiService.instance.fetchEquipos();
-    final result = <Equipo>[];
 
-    for (final e in equipos) {
-      EquipoInfo? info = e.info;
-      if (info == null || info.isEmpty) {
-        try {
-          info = await ApiService.instance.fetchEquipoInfo(e.localizacion);
-        } catch (_) {}
-      }
-
-      result.add(e.copyWith(info: info));
+    // Las fichas que faltan se piden en lotes de seis a la vez, no una por
+    // una en serie: con ~55 equipos la descarga encadenaba 55 peticiones
+    // HTTP seguidas y era lo que hacia lenta la primera sincronizacion.
+    // Seis mantiene el paralelismo por debajo del limite de conexiones del
+    // cliente HTTP sin inundar la API de la planta.
+    final result = List<Equipo>.of(equipos);
+    const lote = 6;
+    for (var inicio = 0; inicio < result.length; inicio += lote) {
+      final fin = (inicio + lote).clamp(0, result.length);
+      await Future.wait([
+        for (var i = inicio; i < fin; i++)
+          () async {
+            final e = result[i];
+            if (e.info != null && !e.info!.isEmpty) return;
+            try {
+              final info =
+                  await ApiService.instance.fetchEquipoInfo(e.localizacion);
+              result[i] = e.copyWith(info: info);
+            } catch (_) {
+              // Sin ficha: el equipo sale igual, con sus datos basicos.
+            }
+          }(),
+      ]);
     }
 
     return result;
@@ -196,9 +216,12 @@ class EquipoService {
     }
   }
 
-  /// Siembra el catalogo incrustado en el almacenamiento local de la tablet.
-  /// Solo actua una vez por cada version del catalogo (catalogoBaseVersion):
-  /// limpia el cache anterior y guarda el catalogo actual con los TAC reales.
+  /// Siembra el catalogo incrustado SOLO en una tablet que no tiene equipos.
+  ///
+  /// Se genera desde MariaDB antes de compilar cada APK, sin cantidad fija.
+  /// Las altas posteriores llegan por el uploader seguro. Si ya hay equipos,
+  /// esto no toca nada, aunque se pierda la marca de version al cerrar sesion.
+  /// El base solo sirve para arrancar una tablet vacia.
   Future<void> _sembrarCatalogoBaseSiHaceFalta() async {
     if (kIsWeb) return;
     try {
@@ -206,7 +229,12 @@ class EquipoService {
       final v = prefs.getInt('catalogo_base_version') ?? 0;
       if (v >= catalogoBaseVersion) return;
 
-      await DbHelper.instance.clearEquiposCache();
+      if (await DbHelper.instance.contarEquipos() > 0) {
+        // Ya hay catalogo: se marca la version y se deja en paz.
+        await prefs.setInt('catalogo_base_version', catalogoBaseVersion);
+        return;
+      }
+
       await DbHelper.instance.upsertEquipos(mockEquipos);
       _cache = List.of(mockEquipos);
       _loaded = true;
@@ -234,9 +262,28 @@ class EquipoService {
     return set.toList()..sort();
   }
 
+  /// Sistema de los compresores de aire.
+  ///
+  /// Aparecen en la lista de equipos como una categoria mas, junto a AGUA
+  /// POTABLE o FUEL OIL. Lo que cambia no es donde estan, sino que se les
+  /// puede hacer: no llevan vibracion, temperatura, alineacion, lubricacion,
+  /// coupling, correas ni reemplazo. Solo la planilla SF-OP-FOR-040.
+  static const codeSysAireComprimido = 9;
+
+  /// Como se llama la categoria en pantalla.
+  static const etiquetaAireComprimido = 'COMPRESORES DE AIRE';
+
+  bool esCompresorDeAire(Equipo e) => e.codeSys == codeSysAireComprimido;
+
+  /// Los compresores, que van por su propio camino.
+  List<Equipo> get compresores =>
+      _cache.where(esCompresorDeAire).toList(growable: false);
+
   List<Equipo> filtrar({String? sistema, String? busqueda}) {
     return _cache.where((e) {
-      if (sistema != null && sistema != 'Todos' && e.sistema != sistema) return false;
+      if (sistema != null && sistema != 'Todos' && e.sistema != sistema) {
+        return false;
+      }
       if (busqueda != null && busqueda.isNotEmpty) {
         final q = busqueda.toLowerCase();
         return e.equipo.toLowerCase().contains(q) ||

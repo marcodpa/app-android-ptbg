@@ -5,12 +5,10 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   late String sync;
   late String home;
-  late String provider;
 
   setUpAll(() {
     sync = File('lib/screens/sync_screen.dart').readAsStringSync();
     home = File('lib/screens/home_screen.dart').readAsStringSync();
-    provider = File('lib/providers/app_provider.dart').readAsStringSync();
   });
 
   test('Sync carga, cuenta y presenta alineaciones pendientes', () {
@@ -32,12 +30,11 @@ void main() {
     expect(sync, isNot(contains('syncAlignment')));
   });
 
-  test('Home y provider incluyen alineaciones en sus estadísticas', () {
-    for (final source in [home, provider]) {
-      expect(source, contains('getPendingAlignments()'));
-      expect(source, contains('countSyncedAlignmentsToday()'));
-      expect(source, contains('countAlignmentErrors()'));
-    }
-    expect(provider, contains('countAlignmentErrors()'));
+  test('Home incluye alineaciones en sus estadísticas', () {
+    // El AppProvider murió con la migración a sync exclusivo por USB.
+    expect(File('lib/providers/app_provider.dart').existsSync(), isFalse);
+    expect(home, contains('getPendingAlignments()'));
+    expect(home, contains('countSyncedAlignmentsToday()'));
+    expect(home, contains('countAlignmentErrors()'));
   });
 }

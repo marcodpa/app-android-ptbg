@@ -54,15 +54,20 @@ class MedicionPrintService {
     _printing = true;
     try {
       if (!kIsWeb) {
-        final sentToLaptop = await _requestLaptopPrint(data, equipo, info);
-        if (sentToLaptop) {
-          await Future<void>.delayed(const Duration(seconds: 6));
+        final requestId = await _requestLaptopPrint(data, equipo, info);
+        if (requestId != null) {
+          // Hay que esperar la confirmacion de la laptop, no un tiempo fijo:
+          // la solicitud viaja por un unico archivo y si se manda la siguiente
+          // antes de que la laptop lea esta, se pierde. Con espera ciega de 6
+          // segundos, imprimir tres mediciones seguidas dejaba fuera las que
+          // la laptop no alcanzaba a leer.
+          await _waitForLaptop(requestId);
           return;
         }
       }
       final bytes = await buildPdf(data: data, equipo: equipo, info: info);
       await Printing.layoutPdf(
-        name: 'SCV-PTBG LOC-${data.localizacion} ${data.fecha}.pdf',
+        name: 'STER LOC-${data.localizacion} ${data.fecha}.pdf',
         onLayout: (_) async => bytes,
       );
     } finally {
@@ -71,14 +76,16 @@ class MedicionPrintService {
     }
   }
 
-  static Future<bool> _requestLaptopPrint(
+  /// Escribe la solicitud y devuelve su id, o null si no se pudo dejar.
+  static Future<String?> _requestLaptopPrint(
     MedicionPrintData data,
     Equipo equipo,
     EquipoInfo? info,
   ) async {
+    final id = DateTime.now().microsecondsSinceEpoch.toString();
     try {
       final request = {
-        'id': DateTime.now().millisecondsSinceEpoch.toString(),
+        'id': id,
         'action': 'print_measurement',
         'created_at': DateTime.now().toIso8601String(),
         'localizacion': data.localizacion,
@@ -106,10 +113,48 @@ class MedicionPrintService {
           File('/data/data/com.example.scv_ptbg/files/usb_print_request.json');
       await file.parent.create(recursive: true);
       await file.writeAsString(jsonEncode(request));
-      return true;
+      return id;
     } catch (_) {
-      return false;
+      return null;
     }
+  }
+
+  static const _statusPath =
+      '/data/data/com.example.scv_ptbg/files/usb_status.json';
+
+  /// Espera a que la laptop confirme esta solicitud concreta.
+  ///
+  /// La laptop escribe DONE o ERROR en usb_status.json con el mismo
+  /// request_id. Hasta que eso llegue no se puede mandar otra impresion.
+  static Future<void> _waitForLaptop(String id) async {
+    final statusFile = File(_statusPath);
+    final limite = DateTime.now().add(const Duration(minutes: 2));
+    while (DateTime.now().isBefore(limite)) {
+      await Future<void>.delayed(const Duration(seconds: 2));
+      try {
+        if (!await statusFile.exists()) continue;
+        final decoded = jsonDecode(await statusFile.readAsString());
+        if (decoded is! Map || decoded['request_id']?.toString() != id) {
+          continue;
+        }
+        final estado = decoded['status']?.toString().toUpperCase();
+        if (estado == 'DONE') return;
+        if (estado == 'ERROR') {
+          final detalle = decoded['detail']?.toString().trim() ?? '';
+          throw Exception(
+            detalle.isEmpty ? 'La laptop no pudo imprimir.' : detalle,
+          );
+        }
+      } on FormatException {
+        continue;
+      } on FileSystemException {
+        continue;
+      }
+    }
+    throw Exception(
+      'La laptop no confirmo la impresion. Revise que el subidor USB este '
+      'abierto y la tablet conectada.',
+    );
   }
 
   static Future<Uint8List> buildPdf({
@@ -118,9 +163,9 @@ class MedicionPrintService {
     EquipoInfo? info,
   }) async {
     final doc = pw.Document();
-    final title =
-        _isVent(equipo) ? 'PROTOCOLO AJUSTE DE CORREAS, TEMPERATURA, LUBRICACION Y VELOCIDAD DE VIBRACION.'
-            : 'PROTOCOLO DE NIVELACION, ALINEACION, TEMPERATURA, LUBRICACION Y VELOCIDAD DE VIBRACION.';
+    final title = _isVent(equipo)
+        ? 'PROTOCOLO AJUSTE DE CORREAS, TEMPERATURA, LUBRICACION Y VELOCIDAD DE VIBRACION.'
+        : 'PROTOCOLO DE NIVELACION, ALINEACION, TEMPERATURA, LUBRICACION Y VELOCIDAD DE VIBRACION.';
     final code = _isVent(equipo) ? 'SF-OP-FOR-021' : 'SF-OP-FOR-020';
     final revision = _isVent(equipo) ? '3' : '4';
     final points = _pointsFor(equipo);
@@ -165,10 +210,11 @@ class MedicionPrintService {
       children: [
         pw.TableRow(
           children: [
-            _cell('SCV-PTBG', bold: true, center: true, rowSpanHint: true),
+            _cell('STER', bold: true, center: true, rowSpanHint: true),
             _cell(title, bold: true, center: true, fontSize: 8.5),
             _cell('CODIGO:\n$code', bold: true, center: true, fontSize: 8),
-            _cell('REVISION:\n$revision', bold: true, center: true, fontSize: 8),
+            _cell('REVISION:\n$revision',
+                bold: true, center: true, fontSize: 8),
           ],
         ),
         pw.TableRow(
@@ -277,7 +323,8 @@ class MedicionPrintService {
 
   static pw.Widget _alignmentBlock(Equipo equipo) {
     if (_isVent(equipo) || equipo.visualType == 5) {
-      return _boxedLine('AJUSTE DE CORREAS: SI________   NO______ ; TENSION: ______');
+      return _boxedLine(
+          'AJUSTE DE CORREAS: SI________   NO______ ; TENSION: ______');
     }
     if (equipo.visualType == 6) {
       return pw.Column(
@@ -417,7 +464,9 @@ class MedicionPrintService {
       decoration: pw.BoxDecoration(
         border: pw.Border.all(color: PdfColors.black, width: 0.55),
       ),
-      child: pw.Text(text, style: const pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold)),
+      child: pw.Text(text,
+          style: const pw.TextStyle(
+              fontSize: 8.5, fontWeight: pw.FontWeight.bold)),
     );
   }
 
@@ -427,7 +476,8 @@ class MedicionPrintService {
   static pw.Widget _labelCell(String text) =>
       _cell(text, bold: true, fontSize: 8, fill: PdfColors.grey200);
 
-  static pw.Widget _valueCell(String text, {bool center = false, double? height}) =>
+  static pw.Widget _valueCell(String text,
+          {bool center = false, double? height}) =>
       _cell(text, center: center, height: height);
 
   static pw.Widget _cell(
@@ -459,7 +509,8 @@ class MedicionPrintService {
     final points = PlanMedicionResolver.fromEquipo(equipo);
     if (points.isNotEmpty) return points;
     return const [
-      PuntoCapturaConfig(puntoPantalla: 1, puntoVisual: 1, puntoDb: 1, nombre: 'Punto 1'),
+      PuntoCapturaConfig(
+          puntoPantalla: 1, puntoVisual: 1, puntoDb: 1, nombre: 'Punto 1'),
     ];
   }
 
@@ -470,7 +521,9 @@ class MedicionPrintService {
 
   static String _clean(String? value) {
     final text = (value ?? '').trim();
-    if (text.isEmpty || text.toUpperCase() == 'NULL' || text.toUpperCase() == 'SIN DATOS') {
+    if (text.isEmpty ||
+        text.toUpperCase() == 'NULL' ||
+        text.toUpperCase() == 'SIN DATOS') {
       return '';
     }
     return text;
@@ -484,7 +537,8 @@ class MedicionPrintService {
     return '';
   }
 
-  static String _fmt(double? value) => value == null ? '' : value.toStringAsFixed(2);
+  static String _fmt(double? value) =>
+      value == null ? '' : value.toStringAsFixed(2);
 
   static String _cleanPointName(String value) {
     return value

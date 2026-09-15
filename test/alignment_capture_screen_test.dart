@@ -64,7 +64,10 @@ void main() {
     expect(find.text('Referencia de alineación correcta'), findsOneWidget);
     expect(find.text('Ángulo'), findsOneWidget);
     expect(find.text('Compensación'), findsOneWidget);
-    expect(find.text('Ejemplo: 0,05'), findsNWidgets(4));
+    expect(
+      find.text('Sin lectura: Ingrese un valor para evaluarlo'),
+      findsNWidgets(4),
+    );
     expect(find.text('Ángulo vertical'), findsOneWidget);
     expect(find.textContaining('anterior'), findsNothing);
   });
@@ -94,7 +97,7 @@ void main() {
     expect(find.byType(TextFormField), findsNWidgets(9));
   });
 
-  testWidgets('todos los campos son obligatorios y solo aceptan coma', (
+  testWidgets('todos los campos son obligatorios y aceptan coma o punto', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -122,25 +125,15 @@ void main() {
     ]) {
       await tester.enterText(find.byKey(Key('alignment-$column')), '0.25');
     }
-    tester
-        .widget<ElevatedButton>(
-          find.byKey(const Key('alignment-save-button')),
-        )
-        .onPressed!();
-    await tester.pump();
-    expect(find.text('Use coma y máximo 2 decimales'), findsNWidgets(4));
-
-    await tester.enterText(
-      find.byKey(const Key('alignment-AMB_ANGULO_V')),
-      '1,234',
+    expect(
+      tester
+          .widget<TextFormField>(
+            find.byKey(const Key('alignment-AMB_ANGULO_V')),
+          )
+          .controller!
+          .text,
+      '0.25',
     );
-    tester
-        .widget<ElevatedButton>(
-          find.byKey(const Key('alignment-save-button')),
-        )
-        .onPressed!();
-    await tester.pump();
-    expect(find.text('Use coma y máximo 2 decimales'), findsWidgets);
   });
 
   testWidgets('guarda valores negativos y cero localmente', (tester) async {
@@ -182,6 +175,35 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  testWidgets('guarda también valores escritos con punto decimal',
+      (tester) async {
+    AlignmentMeasurement? saved;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AlignmentCaptureScreen(
+          equipo: _motorPump,
+          onSave: (measurement) async => saved = measurement,
+        ),
+      ),
+    );
+    for (final column in const [
+      'AMB_ANGULO_V',
+      'AMB_ANGULO_H',
+      'AMB_COMPENSACION_V',
+      'AMB_COMPENSACION_H',
+    ]) {
+      await tester.enterText(find.byKey(Key('alignment-$column')), '0.25');
+    }
+    tester
+        .widget<ElevatedButton>(
+          find.byKey(const Key('alignment-save-button')),
+        )
+        .onPressed!();
+    await tester.pumpAndSettle();
+
+    expect(saved?.valores.values.whereType<double>(), everyElement(0.25));
   });
 
   test('captura no contiene ningún transporte remoto', () {

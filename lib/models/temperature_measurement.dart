@@ -1,14 +1,8 @@
-double? parseTemperature(Object? value) {
-  if (value == null) return null;
-  if (value is num) return value.toDouble();
-  return double.tryParse(value.toString().trim().replaceAll(',', '.'));
-}
+import 'coercion.dart';
 
-int _temperatureInt(Object? value) {
-  if (value is int) return value;
-  if (value is num) return value.toInt();
-  return int.tryParse('${value ?? ''}') ?? 0;
-}
+double? parseTemperature(Object? value) => decimalDe(value);
+
+int _temperatureInt(Object? value) => enteroDe(value);
 
 DateTime _temperatureDateTime(String fecha, String hora) {
   final date = fecha.trim().split('T').first.split(' ').first;
@@ -129,6 +123,20 @@ class TemperatureMeasurement {
   }
 
   TemperatureMeasurement copyWith({
+    Map<String, double?>? valores,
+    String? observaciones,
+    // Quien lo hizo, su cargo y la orden de trabajo se pueden corregir. Son
+    // los que mas se equivocan al capturar con prisa y antes no habia forma
+    // de arreglarlos desde la tablet: habia que borrar el registro y volver
+    // a tomar todas las lecturas.
+    String? responsable,
+    String? cargo,
+    int? odt,
+    // La fecha y la hora tambien: una medicion capturada con la fecha
+    // equivocada desordena el historial del equipo. Solo el administrador
+    // llega al editor, y el cambio queda en la bitacora.
+    String? fecha,
+    String? hora,
     bool? sincronizado,
     String? errorSync,
     bool clearError = false,
@@ -137,16 +145,16 @@ class TemperatureMeasurement {
       uuid: uuid,
       localizacion: localizacion,
       sistema: sistema,
-      fecha: fecha,
-      hora: hora,
-      valores: valores,
-      observaciones: observaciones,
-      responsable: responsable,
-      cargo: cargo,
+      fecha: fecha ?? this.fecha,
+      hora: hora ?? this.hora,
+      valores: valores ?? this.valores,
+      observaciones: observaciones ?? this.observaciones,
+      responsable: responsable ?? this.responsable,
+      cargo: cargo ?? this.cargo,
       marca: marca,
       modelo: modelo,
       serial: serial,
-      odt: odt,
+      odt: odt ?? this.odt,
       sincronizado: sincronizado ?? this.sincronizado,
       errorSync: clearError ? null : errorSync ?? this.errorSync,
     );

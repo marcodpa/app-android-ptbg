@@ -5,23 +5,28 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../theme.dart';
 import '../models/models.dart';
+import '../models/measurement_validation.dart';
 import '../models/equipo_visual_config.dart';
 import '../models/measurement_editing.dart';
 import '../models/measurement_quality.dart';
 import '../models/usb_sync_status.dart';
+import '../widgets/avisos.dart';
+import '../widgets/capture_summary.dart';
 import '../widgets/equipo_punto_viewer.dart';
+import '../widgets/fecha_medicion.dart';
+import '../widgets/industrial_header_style.dart';
 import '../services/api_service.dart';
 import '../db/db_helper.dart';
 
 class CaptureScreen extends StatefulWidget {
   final Equipo equipo;
+  final int? odt;
 
-  const CaptureScreen({super.key, required this.equipo});
+  const CaptureScreen({super.key, required this.equipo, this.odt});
 
   @override
   State<CaptureScreen> createState() => _CaptureScreenState();
@@ -30,6 +35,7 @@ class CaptureScreen extends StatefulWidget {
 class _CaptureScreenState extends State<CaptureScreen> {
   final _valCtrl = TextEditingController();
   final _obsCtrl = TextEditingController();
+  final _fechaMedicion = FechaHoraMedicion();
   final _focus = FocusNode();
 
   late final EquipoVisualConfig _visualConfig;
@@ -54,7 +60,6 @@ class _CaptureScreenState extends State<CaptureScreen> {
   void initState() {
     super.initState();
     _visualConfig = EquipoVisualResolver.fromEquipo(widget.equipo);
-    _valCtrl.addListener(_onValueChanged);
     _loadUsbStatus();
     _usbStatusTimer = Timer.periodic(
       const Duration(seconds: 3),
@@ -66,7 +71,6 @@ class _CaptureScreenState extends State<CaptureScreen> {
   @override
   void dispose() {
     _usbStatusTimer?.cancel();
-    _valCtrl.removeListener(_onValueChanged);
     _valCtrl.dispose();
     _obsCtrl.dispose();
     _focus.dispose();
@@ -99,6 +103,10 @@ class _CaptureScreenState extends State<CaptureScreen> {
     }
 
     if (!mounted || fileStatus == null) return;
+    // Cada 3 segundos entra un tick; sin esta comparacion la pantalla de
+    // captura entera —con su visor CustomPaint— se redibujaba aunque el
+    // estado USB no hubiera cambiado.
+    if (fileStatus == _usbStatus) return;
     setState(() => _usbStatus = fileStatus!);
   }
 
@@ -142,36 +150,6 @@ class _CaptureScreenState extends State<CaptureScreen> {
       }
     }
 
-    // Consultamos también el servidor y comparamos fecha/hora. Así una fila
-    // antigua nunca reemplaza una lectura más reciente guardada en la tablet.
-    try {
-      final remota = await ApiService.instance
-          .fetchUltimaLectura(widget.equipo.localizacion);
-      if (remota != null) {
-        if (ul == null || remota.fechaHora.isAfter(ul.fechaHora)) {
-          ul = remota;
-        }
-        if (!kIsWeb) {
-          try {
-            await DbHelper.instance.upsertUltimaLectura(remota);
-          } catch (_) {}
-        }
-      }
-    } catch (_) {}
-
-    try {
-      final remoteInfo =
-          await ApiService.instance.fetchEquipoInfo(widget.equipo.localizacion);
-      if (remoteInfo != null && !remoteInfo.isEmpty) {
-        info = remoteInfo;
-        if (!kIsWeb) {
-          try {
-            await DbHelper.instance.upsertEquipoInfo(remoteInfo);
-          } catch (_) {}
-        }
-      }
-    } catch (_) {}
-
     if (!mounted) return;
     setState(() {
       _steps = steps;
@@ -184,6 +162,50 @@ class _CaptureScreenState extends State<CaptureScreen> {
     // Al entrar a iniciar medición, abrimos el teclado automáticamente
     // para que el operador solo capture la lectura y avance.
     _openKeyboardLater();
+
+    // El servidor se consulta DESPUES de dibujar. Antes se esperaban estas
+    // dos llamadas antes de mostrar nada y, en una tablet que trabaja por
+    // USB —sin ruta al servidor de la planta—, cada una agota su tiempo de
+    // espera: el mecanico miraba el circulito en cada equipo que media.
+    _refrescarDesdeServidor();
+  }
+
+  /// Trae del servidor la ultima lectura y la ficha tecnica, y actualiza la
+  /// pantalla si llegan. Sin red no pasa nada: la captura ya esta lista.
+  Future<void> _refrescarDesdeServidor() async {
+    try {
+      final remota = await ApiService.instance
+          .fetchUltimaLectura(widget.equipo.localizacion);
+      if (remota != null) {
+        final actual = _ultima;
+        if (actual == null || remota.fechaHora.isAfter(actual.fechaHora)) {
+          if (!kIsWeb) {
+            try {
+              await DbHelper.instance.upsertUltimaLectura(remota);
+            } catch (_) {}
+          }
+          if (mounted) {
+            setState(() {
+              _ultima = remota;
+              _ultimaFecha = '${remota.fecha} ${remota.hora}';
+            });
+          }
+        }
+      }
+    } catch (_) {}
+
+    try {
+      final remoteInfo =
+          await ApiService.instance.fetchEquipoInfo(widget.equipo.localizacion);
+      if (remoteInfo != null && !remoteInfo.isEmpty) {
+        if (!kIsWeb) {
+          try {
+            await DbHelper.instance.upsertEquipoInfo(remoteInfo);
+          } catch (_) {}
+        }
+        if (mounted) setState(() => _info = remoteInfo);
+      }
+    } catch (_) {}
   }
 
   void _openKeyboardLater() {
@@ -195,20 +217,16 @@ class _CaptureScreenState extends State<CaptureScreen> {
   }
 
   double? _parseValue() {
-    final text = _valCtrl.text.trim().replaceAll(',', '.');
-    if (text.isEmpty) return null;
-    return double.tryParse(text);
-  }
-
-  void _onValueChanged() {
-    if (mounted) setState(() {});
+    return MeasurementValidation.parseDecimal(_valCtrl.text);
   }
 
   void _saveCurrent({bool requireValue = false}) {
     final value = _parseValue();
-    if (requireValue && value == null) {
-      _showSnack(
-          'Ingrese la lectura en mm/s antes de continuar.', AppColors.warning);
+    final error = requireValue
+        ? MeasurementValidation.requiredNumber(_valCtrl.text)
+        : null;
+    if (error != null) {
+      avisar(context, error, AppColors.warning);
       throw const _MissingValueException();
     }
 
@@ -247,29 +265,14 @@ class _CaptureScreenState extends State<CaptureScreen> {
 
   Future<bool> _confirmExitIfNeeded() async {
     if (!_hasMeasurementProgress) return true;
-    final result = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: const Text('Salir de la medicion'),
-        content: const Text(
-          'Esta medicion no se ha terminado. Si sales ahora se perderan los valores capturados.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Salir'),
-          ),
-        ],
-      ),
+    return confirmar(
+      context,
+      titulo: 'Salir de la medición',
+      mensaje:
+          'Esta medición no se ha terminado. Si sales ahora se perderán los valores capturados.',
+      textoConfirmar: 'SALIR',
+      destructivo: true,
     );
-    return result ?? false;
   }
 
   Future<void> _back() async {
@@ -297,6 +300,32 @@ class _CaptureScreenState extends State<CaptureScreen> {
     _openKeyboardLater();
   }
 
+  /// Agrupa los pasos por punto: cada paso es un eje, y la tabla es por punto.
+  List<CaptureSummaryRow> _resumenPuntos() {
+    final orden = <int>[];
+    final ejes = <int, Map<String, double?>>{};
+    final nombres = <int, String>{};
+    for (final step in _steps) {
+      if (!ejes.containsKey(step.puntoN)) {
+        orden.add(step.puntoN);
+        ejes[step.puntoN] = <String, double?>{};
+        nombres[step.puntoN] = step.etiqueta;
+      }
+      ejes[step.puntoN]![step.eje.toUpperCase()] = step.valor;
+    }
+    return [
+      for (final punto in orden)
+        CaptureSummaryRow(
+          numero: '$punto',
+          nombre: nombres[punto] ?? 'Punto $punto',
+          valores: [
+            for (final eje in const ['H', 'V', 'A'])
+              CaptureSummary.formatear(ejes[punto]![eje]),
+          ],
+        ),
+    ];
+  }
+
   Future<void> _openGeneralObservationDialog() async {
     var draft = _obsCtrl.text;
 
@@ -305,14 +334,36 @@ class _CaptureScreenState extends State<CaptureScreen> {
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Observacion general'),
-        content: TextFormField(
-          initialValue: draft,
-          autofocus: true,
-          maxLines: 4,
-          decoration: const InputDecoration(
-            hintText: 'Observacion general de la muestra...',
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // El resumen de lo medido queda a la vista mientras escribe:
+                // ver el valor de cada punto es lo que le hace recordar que
+                // encontro ahi.
+                CaptureSummary(
+                  headers: const ['H', 'V', 'A'],
+                  rows: _resumenPuntos(),
+                ),
+                const SizedBox(height: 14),
+                TextFormField(
+                  initialValue: draft,
+                  autofocus: true,
+                  maxLines: 4,
+                  decoration: const InputDecoration(
+                    hintText: 'Observacion general de la muestra...',
+                  ),
+                  onChanged: (value) => draft = value,
+                ),
+                const SizedBox(height: 12),
+                // Para la medicion hecha antes sin la tablet a mano.
+                SelectorFechaMedicion(valor: _fechaMedicion),
+              ],
+            ),
           ),
-          onChanged: (value) => draft = value,
         ),
         actions: [
           TextButton.icon(
@@ -345,7 +396,6 @@ class _CaptureScreenState extends State<CaptureScreen> {
     FocusScope.of(context).unfocus();
     setState(() => _saving = true);
 
-    final now = DateTime.now();
     final vals = <String, double?>{};
 
     for (final step in _steps) {
@@ -358,10 +408,9 @@ class _CaptureScreenState extends State<CaptureScreen> {
     String cargo = '';
     try {
       final prefs = await SharedPreferences.getInstance();
-      responsable = (prefs.getString('responsable') ??
-              prefs.getString('username') ??
-              '')
-          .trim();
+      responsable =
+          (prefs.getString('responsable') ?? prefs.getString('username') ?? '')
+              .trim();
       cargo = (prefs.getString('cargo') ?? prefs.getString('rol') ?? '').trim();
     } catch (_) {}
 
@@ -369,8 +418,8 @@ class _CaptureScreenState extends State<CaptureScreen> {
       uuid: const Uuid().v4(),
       localizacion: widget.equipo.localizacion,
       sistema: widget.equipo.sistema,
-      fecha: DateFormat('yyyy-MM-dd').format(now),
-      hora: DateFormat('HH:mm:ss').format(now),
+      fecha: _fechaMedicion.fecha,
+      hora: _fechaMedicion.hora,
       valores: vals,
       rms: rms,
       observaciones: obsStr,
@@ -379,14 +428,20 @@ class _CaptureScreenState extends State<CaptureScreen> {
       marca: (_info ?? widget.equipo.info)?.marca,
       modelo: (_info ?? widget.equipo.info)?.modelo,
       serial: (_info ?? widget.equipo.info)?.serial,
+      odt: widget.odt,
     );
 
     if (!kIsWeb) {
       try {
         await DbHelper.instance.insertMedicion(medicion);
+        await _fechaMedicion.registrarSiManual(
+          servicio: 'vibración',
+          localizacion: widget.equipo.localizacion,
+          uuid: medicion.uuid,
+        );
       } catch (e) {
         if (mounted) {
-          _showSnack('No se pudo guardar localmente: $e', AppColors.error);
+          avisar(context, 'No se pudo guardar localmente: $e', AppColors.error);
         }
       }
     }
@@ -472,25 +527,19 @@ class _CaptureScreenState extends State<CaptureScreen> {
                         ),
                       ),
                       const SizedBox(width: 10),
-                      const Expanded(
+                      Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
                               'Detalles del equipo',
-                              style: TextStyle(
-                                color: AppColors.textPrimary,
-                                fontSize: 18,
-                                fontWeight: FontWeight.w900,
-                              ),
+                              style: AppText.titulo
+                                  .copyWith(color: AppColors.textPrimary),
                             ),
                             Text(
                               'Información técnica descargada de la base de datos',
-                              style: TextStyle(
-                                color: AppColors.textSecondary,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                              ),
+                              style: AppText.subtitulo
+                                  .copyWith(color: AppColors.textSecondary),
                             ),
                           ],
                         ),
@@ -531,55 +580,21 @@ class _CaptureScreenState extends State<CaptureScreen> {
     );
   }
 
-  void _showSuccessDialog(MedicionLocal medicion) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: const Row(
-          children: [
-            Icon(Icons.check_circle_rounded, color: AppColors.teal),
-            SizedBox(width: 10),
-            Text('Medición guardada'),
-          ],
-        ),
-        content: Text(
-          'Equipo: ${widget.equipo.equipo}\n'
+  Future<void> _showSuccessDialog(MedicionLocal medicion) async {
+    await avisarGuardado(
+      context,
+      titulo: 'Medición guardada',
+      mensaje: 'Equipo: ${widget.equipo.equipo}\n'
           'Serial: ${_cleanInfoValue(_info?.serial)}\n'
           'Fecha: ${medicion.fecha}\n'
           'Hora: ${medicion.hora}\n\n'
           'Quedó guardada en la tablet para sincronizar.',
-        ),
-        actions: [
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(dialogContext, rootNavigator: true).pop();
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (!mounted) return;
-                final navigator = Navigator.of(context);
-                if (navigator.canPop()) {
-                  navigator.pop(true);
-                }
-              });
-            },
-            child: const Text('Cerrar'),
-          ),
-        ],
-      ),
     );
-  }
-
-  void _showSnack(String message, Color color) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content:
-            Text(message, style: const TextStyle(fontWeight: FontWeight.w700)),
-        backgroundColor: color,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop(true);
+    }
   }
 
   @override
@@ -587,15 +602,18 @@ class _CaptureScreenState extends State<CaptureScreen> {
     if (_loading) {
       return Scaffold(
         backgroundColor: AppColors.bg,
-        body: Column(
-          children: [
-            _buildHeader(),
-            const Expanded(
-              child: Center(
-                child: CircularProgressIndicator(color: AppColors.teal),
+        body: SafeArea(
+          minimum: const EdgeInsets.only(top: 8),
+          child: Column(
+            children: [
+              _buildHeader(),
+              const Expanded(
+                child: Center(
+                  child: CircularProgressIndicator(color: AppColors.teal),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
     }
@@ -603,18 +621,21 @@ class _CaptureScreenState extends State<CaptureScreen> {
     if (_steps.isEmpty) {
       return Scaffold(
         backgroundColor: AppColors.bg,
-        body: Column(
-          children: [
-            _buildHeader(),
-            const Expanded(
-              child: Center(
-                child: Text(
-                  'No hay puntos configurados para este equipo.',
-                  style: TextStyle(fontWeight: FontWeight.w800),
+        body: SafeArea(
+          minimum: const EdgeInsets.only(top: 8),
+          child: Column(
+            children: [
+              _buildHeader(),
+              const Expanded(
+                child: Center(
+                  child: Text(
+                    'No hay puntos configurados para este equipo.',
+                    style: AppText.cuerpoFuerte,
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
     }
@@ -637,52 +658,65 @@ class _CaptureScreenState extends State<CaptureScreen> {
         ? (size.height * 0.34).clamp(175.0, 255.0).toDouble()
         : (size.height * 0.28).clamp(220.0, 315.0).toDouble();
 
-    return WillPopScope(
-      onWillPop: _confirmExitIfNeeded,
+    return PopScope(
+      // El gesto de atras pregunta antes de perder una medicion a medias,
+      // igual que el boton Salir. PopScope y no WillPopScope, que quedo
+      // deprecado y ademas rompia el gesto predictivo de Android.
+      canPop: !_hasMeasurementProgress,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        // El navegador se captura antes del await: es la forma canonica de
+        // no usar el context a traves de un hueco asincrono.
+        final navegador = Navigator.of(context);
+        final salir = await _confirmExitIfNeeded();
+        if (salir) navegador.pop();
+      },
       child: Scaffold(
         resizeToAvoidBottomInset: true,
         backgroundColor: AppColors.bg,
         body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(compact: compactMode),
-            _buildProgressStrip(compact: compactMode),
-            // Detalles técnicos movidos a un botón para no cargar la pantalla.
-            SizedBox(
-              height: imageHeight,
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(
-                    12, keyboardOpen ? 5 : 8, 12, keyboardOpen ? 4 : 6),
-                child: EquipoPuntoViewer(
-                  config: _visualConfig,
-                  punto: current.visualPuntoN,
-                  puntoEtiqueta: current.puntoN,
-                  dbColumn: current.dbColumn,
-                  eje: current.eje,
-                  lecturaAnterior: anterior,
-                  fechaAnterior: _ultimaFecha,
-                  showFooter: false,
-                  marca: _cleanInfoValue((_info ?? widget.equipo.info)?.marca),
-                  modelo:
-                      _cleanInfoValue((_info ?? widget.equipo.info)?.modelo),
-                  serial:
-                      _cleanInfoValue((_info ?? widget.equipo.info)?.serial),
-                  onLegendTap: _showEquipmentDetails,
+          minimum: const EdgeInsets.only(top: 8),
+          child: Column(
+            children: [
+              _buildHeader(compact: compactMode),
+              _buildProgressStrip(compact: compactMode),
+              // Detalles técnicos movidos a un botón para no cargar la pantalla.
+              SizedBox(
+                height: imageHeight,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                      12, keyboardOpen ? 5 : 8, 12, keyboardOpen ? 4 : 6),
+                  child: EquipoPuntoViewer(
+                    config: _visualConfig,
+                    punto: current.visualPuntoN,
+                    puntoEtiqueta: current.puntoN,
+                    dbColumn: current.dbColumn,
+                    eje: current.eje,
+                    lecturaAnterior: anterior,
+                    fechaAnterior: _ultimaFecha,
+                    showFooter: false,
+                    marca:
+                        _cleanInfoValue((_info ?? widget.equipo.info)?.marca),
+                    modelo:
+                        _cleanInfoValue((_info ?? widget.equipo.info)?.modelo),
+                    serial:
+                        _cleanInfoValue((_info ?? widget.equipo.info)?.serial),
+                    onLegendTap: _showEquipmentDetails,
+                  ),
                 ),
               ),
-            ),
-            Expanded(
-              child: _buildOperatorPanel(
-                current: current,
-                ejeNombre: ejeNombre,
-                ejeColor: ejeColor,
-                anterior: anterior,
-                isLast: isLast,
-                compact: compactMode,
+              Expanded(
+                child: _buildOperatorPanel(
+                  current: current,
+                  ejeNombre: ejeNombre,
+                  ejeColor: ejeColor,
+                  anterior: anterior,
+                  isLast: isLast,
+                  compact: compactMode,
+                ),
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
         ),
       ),
     );
@@ -692,24 +726,14 @@ class _CaptureScreenState extends State<CaptureScreen> {
     return Container(
       height: compact ? 50 : 62,
       padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: const BoxDecoration(gradient: AppColors.gradPrimary),
+      decoration: IndustrialHeaderStyle.decoration,
       child: Row(
         children: [
-          SizedBox(
-            width: compact ? 36 : 42,
-            height: compact ? 36 : 42,
-            child: Material(
-              color: Colors.white.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(13),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(13),
-                onTap: () {
-                  _back();
-                },
-                child: const Icon(Icons.arrow_back_rounded,
-                    color: Colors.white, size: 24),
-              ),
-            ),
+          IconButton(
+            tooltip: 'Volver',
+            onPressed: _back,
+            style: IndustrialHeaderStyle.actionStyle,
+            icon: const Icon(Icons.arrow_back_rounded, size: 20),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -721,11 +745,8 @@ class _CaptureScreenState extends State<CaptureScreen> {
                   widget.equipo.equipo,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: compact ? 15 : 18,
-                    fontWeight: FontWeight.w900,
-                  ),
+                  style: IndustrialHeaderStyle.title
+                      .copyWith(fontSize: compact ? 18 : 20),
                 ),
                 if (!compact) ...[
                   const SizedBox(height: 2),
@@ -733,32 +754,17 @@ class _CaptureScreenState extends State<CaptureScreen> {
                     '${widget.equipo.qrDisplay}  ·  ${widget.equipo.sistema}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: AppColors.teal.withValues(alpha: 0.95),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
+                    style: IndustrialHeaderStyle.subtitle,
                   ),
                 ],
               ],
             ),
           ),
-          SizedBox(
-            width: compact ? 36 : 42,
-            height: compact ? 36 : 42,
-            child: Material(
-              color: Colors.white.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(13),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(13),
-                onTap: _showEquipmentDetails,
-                child: Icon(
-                  Icons.info_outline_rounded,
-                  color: Colors.white,
-                  size: compact ? 20 : 23,
-                ),
-              ),
-            ),
+          IconButton(
+            tooltip: 'Información del equipo',
+            onPressed: _showEquipmentDetails,
+            style: IndustrialHeaderStyle.actionStyle,
+            icon: const Icon(Icons.info_outline_rounded, size: 20),
           ),
           const SizedBox(width: 8),
           Container(
@@ -771,11 +777,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
             ),
             child: Text(
               '${_steps.length ~/ 3} pts',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w900,
-                fontSize: compact ? 11 : 12,
-              ),
+              style: AppText.micro.copyWith(color: Colors.white),
             ),
           ),
         ],
@@ -792,11 +794,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
         children: [
           Text(
             'Paso ${_idx + 1}/${_steps.length}',
-            style: TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: compact ? 12 : 13,
-              fontWeight: FontWeight.w900,
-            ),
+            style: AppText.etiqueta.copyWith(color: AppColors.textPrimary),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -813,12 +811,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
           const SizedBox(width: 10),
           Text(
             '${(_progress * 100).round()}%',
-            style: TextStyle(
-              color: AppColors.teal,
-              fontSize: compact ? 12 : 13,
-              fontWeight: FontWeight.w900,
-              fontFamily: 'monospace',
-            ),
+            style: AppText.mono.copyWith(color: AppColors.teal),
           ),
           const SizedBox(width: 8),
           _usbMiniChip(compact: compact),
@@ -853,110 +846,10 @@ class _CaptureScreenState extends State<CaptureScreen> {
             const SizedBox(width: 4),
             Text(
               connected ? 'USB ON' : 'USB OFF',
-              style: TextStyle(
-                color: color,
-                fontSize: compact ? 10 : 11,
-                fontWeight: FontWeight.w900,
-              ),
+              style: AppText.micro.copyWith(color: color),
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildEquipoInfoStrip({bool compact = false}) {
-    String clean(String? value, {String fallback = 'Sin datos'}) {
-      if (value == null) return fallback;
-      final v = value.trim();
-      if (v.isEmpty ||
-          v.toUpperCase() == 'NULL' ||
-          v.toUpperCase() == 'SIN DATOS') {
-        return fallback;
-      }
-      return v;
-    }
-
-    final info = _info ?? widget.equipo.info;
-
-    final topItems = <_InfoItem>[
-      _InfoItem('Serial', clean(info?.serial)),
-      _InfoItem('Modelo', clean(info?.modelo)),
-      _InfoItem('Marca', clean(info?.marca)),
-    ];
-
-    final bottomItems = <_InfoItem>[
-      _InfoItem('LC', widget.equipo.localizacion.toString()),
-      _InfoItem('QR', clean(widget.equipo.qrDisplay)),
-      _InfoItem('HP', clean(info?.hp)),
-      _InfoItem('Voltaje', clean(info?.volts)),
-      _InfoItem('FLA', clean(info?.fla)),
-      _InfoItem('SF', clean(info?.sf)),
-      _InfoItem('Hz', clean(info?.hz)),
-      _InfoItem('RPM', clean(info?.rpm)),
-      _InfoItem('Arranque', clean(info?.start)),
-    ];
-
-    Widget chipRow(List<_InfoItem> items, {required bool important}) {
-      return SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        physics: const BouncingScrollPhysics(),
-        child: Row(
-          children: [
-            for (int i = 0; i < items.length; i++) ...[
-              _InfoChip(
-                label: items[i].label,
-                value: items[i].value,
-                compact: compact,
-                important: important,
-              ),
-              if (i != items.length - 1) SizedBox(width: compact ? 6 : 8),
-            ],
-          ],
-        ),
-      );
-    }
-
-    return Container(
-      height: compact ? 76 : 92,
-      width: double.infinity,
-      padding: EdgeInsets.fromLTRB(10, compact ? 6 : 8, 10, compact ? 6 : 8),
-      decoration: const BoxDecoration(
-        color: AppColors.surface2,
-        border: Border(
-          top: BorderSide(color: AppColors.border),
-          bottom: BorderSide(color: AppColors.border),
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: compact ? 40 : 46,
-            height: compact ? 40 : 46,
-            decoration: BoxDecoration(
-              color: AppColors.tealLight,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.teal.withValues(alpha: 0.28)),
-            ),
-            child: Icon(
-              Icons.badge_rounded,
-              color: AppColors.teal,
-              size: compact ? 24 : 28,
-            ),
-          ),
-          const SizedBox(width: 9),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                chipRow(topItems, important: true),
-                SizedBox(height: compact ? 5 : 7),
-                chipRow(bottomItems, important: false),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -1046,7 +939,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
               color: ejeColor,
               borderRadius: BorderRadius.circular(11),
             ),
-            child: Icon(_iconForEje(current.eje),
+            child: Icon(iconoDeEje(current.eje),
                 color: Colors.white, size: compact ? 19 : 23),
           ),
           const SizedBox(width: 9),
@@ -1059,21 +952,14 @@ class _CaptureScreenState extends State<CaptureScreen> {
                   'Punto ${current.puntoN}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: compact ? 13 : 15,
-                    fontWeight: FontWeight.w900,
-                  ),
+                  style: AppText.seccion.copyWith(color: AppColors.textPrimary),
                 ),
                 Text(
                   current.etiqueta,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: compact ? 10 : 11,
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: AppText.subtitulo
+                      .copyWith(color: AppColors.textSecondary),
                 ),
               ],
             ),
@@ -1089,12 +975,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
             ),
             child: Text(
               ejeCorto(current.eje),
-              style: TextStyle(
-                color: ejeColor,
-                fontSize: compact ? 12 : 14,
-                fontWeight: FontWeight.w900,
-                fontFamily: 'monospace',
-              ),
+              style: AppText.mono.copyWith(color: ejeColor),
             ),
           ),
         ],
@@ -1107,10 +988,6 @@ class _CaptureScreenState extends State<CaptureScreen> {
     required Color ejeColor,
     required bool compact,
   }) {
-    final quality = VibrationQuality.fromValue(_parseValue());
-    final qualityColor = _qualityColor(quality.level);
-    final qualityBg = _qualityBg(quality.level);
-
     return Container(
       padding: EdgeInsets.all(compact ? 7 : 9),
       decoration: BoxDecoration(
@@ -1128,20 +1005,12 @@ class _CaptureScreenState extends State<CaptureScreen> {
               const SizedBox(width: 5),
               Text(
                 'Lectura nueva',
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: compact ? 11 : 12,
-                  fontWeight: FontWeight.w900,
-                ),
+                style: AppText.etiqueta.copyWith(color: AppColors.textPrimary),
               ),
               const Spacer(),
-              const Text(
+              Text(
                 'mm/s',
-                style: TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w900,
-                ),
+                style: AppText.micro.copyWith(color: AppColors.textSecondary),
               ),
             ],
           ),
@@ -1154,8 +1023,13 @@ class _CaptureScreenState extends State<CaptureScreen> {
             textAlignVertical: TextAlignVertical.center,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'[0-9\.,]')),
+              MeasurementValidation.decimalFormatter(signed: false),
             ],
+            // Fuera de la escala a proposito. Es el unico campo que el tecnico
+            // teclea con guantes, y su tamano esta atado al alto que queda
+            // libre en el panel: crece o encoge con `compact` para no
+            // desbordar el Expanded cuando se abre el teclado. Ninguno de los
+            // roles de AppText puede seguir esa medida variable.
             style: TextStyle(
               fontSize: compact ? 22 : 27,
               fontWeight: FontWeight.w900,
@@ -1165,7 +1039,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
             decoration: InputDecoration(
               hintText: '0.00',
               filled: true,
-              fillColor: Colors.white,
+              fillColor: AppColors.surface2,
               isDense: true,
               contentPadding: EdgeInsets.symmetric(
                   horizontal: 9, vertical: compact ? 8 : 10),
@@ -1185,44 +1059,51 @@ class _CaptureScreenState extends State<CaptureScreen> {
             onSubmitted: (_) => _next(),
           ),
           SizedBox(height: compact ? 4 : 6),
-          Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: compact ? 8 : 10,
-              vertical: compact ? 5 : 6,
-            ),
-            decoration: BoxDecoration(
-              color: qualityBg,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: qualityColor.withValues(alpha: 0.28)),
-            ),
-            child: Row(
-              children: [
-                Icon(_qualityIcon(quality.level),
-                    color: qualityColor, size: compact ? 14 : 16),
-                const SizedBox(width: 6),
-                Text(
-                  quality.label,
-                  style: TextStyle(
-                    color: qualityColor,
-                    fontSize: compact ? 10 : 11,
-                    fontWeight: FontWeight.w900,
-                  ),
+          // Solo esta franja escucha el campo de texto. Antes habia un
+          // addListener con setState que reconstruia la pantalla entera
+          // —incluido el visor CustomPaint del equipo— en cada tecla, y en
+          // la tablet se sentia como teclado a tirones. El unico widget que
+          // depende del valor tecleado es este semaforo de calidad.
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: _valCtrl,
+            builder: (context, _, __) {
+              final quality = VibrationQuality.fromValue(_parseValue());
+              final qualityColor = _qualityColor(quality.level);
+              final qualityBg = _qualityBg(quality.level);
+              return Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: compact ? 8 : 10,
+                  vertical: compact ? 5 : 6,
                 ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    quality.detail,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: compact ? 9 : 10,
-                      fontWeight: FontWeight.w700,
+                decoration: BoxDecoration(
+                  color: qualityBg,
+                  borderRadius: BorderRadius.circular(10),
+                  border:
+                      Border.all(color: qualityColor.withValues(alpha: 0.28)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(_qualityIcon(quality.level),
+                        color: qualityColor, size: compact ? 14 : 16),
+                    const SizedBox(width: 6),
+                    Text(
+                      quality.label,
+                      style: AppText.etiqueta.copyWith(color: qualityColor),
                     ),
-                  ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        quality.detail,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppText.micro
+                            .copyWith(color: AppColors.textSecondary),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              );
+            },
           ),
         ],
       ),
@@ -1302,10 +1183,8 @@ class _CaptureScreenState extends State<CaptureScreen> {
           Text(
             'Lectura anterior',
             textAlign: TextAlign.center,
-            style: TextStyle(
+            style: AppText.micro.copyWith(
               color: hasAnterior ? Colors.white70 : AppColors.textSecondary,
-              fontSize: compact ? 9 : 10,
-              fontWeight: FontWeight.w900,
             ),
           ),
           SizedBox(height: compact ? 1 : 3),
@@ -1314,11 +1193,8 @@ class _CaptureScreenState extends State<CaptureScreen> {
             textAlign: TextAlign.center,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(
+            style: AppText.datoGrande.copyWith(
               color: hasAnterior ? Colors.white : AppColors.textPrimary,
-              fontSize: compact ? 15 : 18,
-              fontWeight: FontWeight.w900,
-              fontFamily: 'monospace',
             ),
           ),
           if (!compact) ...[
@@ -1330,10 +1206,8 @@ class _CaptureScreenState extends State<CaptureScreen> {
               textAlign: TextAlign.center,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
+              style: AppText.micro.copyWith(
                 color: hasAnterior ? Colors.white70 : AppColors.textHint,
-                fontSize: 9,
-                fontWeight: FontWeight.w700,
               ),
             ),
           ],
@@ -1356,7 +1230,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
               text: _idx == 0 ? 'Salir' : 'Atrás',
               icon: Icons.arrow_back_rounded,
               filled: false,
-              color: AppColors.headerTop,
+              color: AppColors.teal,
               onPressed: _saving
                   ? null
                   : () {
@@ -1385,19 +1259,6 @@ class _CaptureScreenState extends State<CaptureScreen> {
   String _fmtAnterior(double? value) {
     if (value == null) return 'N/A';
     return value.toStringAsFixed(2);
-  }
-
-  IconData _iconForEje(String eje) {
-    switch (eje.toUpperCase()) {
-      case 'H':
-        return Icons.swap_horiz_rounded;
-      case 'V':
-        return Icons.swap_vert_rounded;
-      case 'A':
-        return Icons.keyboard_double_arrow_right_rounded;
-      default:
-        return Icons.location_on_outlined;
-    }
   }
 }
 
@@ -1456,10 +1317,7 @@ class _ActionButtonLite extends StatelessWidget {
           foregroundColor: Colors.white,
           elevation: 0,
           padding: EdgeInsets.zero,
-          textStyle: TextStyle(
-            fontSize: compact ? 12 : 13,
-            fontWeight: FontWeight.w900,
-          ),
+          textStyle: AppText.cuerpoFuerte,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
         ),
@@ -1473,10 +1331,7 @@ class _ActionButtonLite extends StatelessWidget {
         foregroundColor: color,
         side: BorderSide(color: color.withValues(alpha: 0.45)),
         padding: EdgeInsets.zero,
-        textStyle: TextStyle(
-          fontSize: compact ? 12 : 13,
-          fontWeight: FontWeight.w900,
-        ),
+        textStyle: AppText.cuerpoFuerte,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
       ),
       child: child,
@@ -1504,7 +1359,11 @@ class _DetailRow extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: important ? AppColors.tealLight : AppColors.bg2,
+        // tealLight (#E6F7F4) es casi blanco y el valor se pinta con
+        // textPrimary (#F4F8FF): quedaba blanco sobre blanco. Se usa el mismo
+        // teal translucido que _InfoChip, que si contrasta con el tema oscuro.
+        color:
+            important ? AppColors.teal.withValues(alpha: .14) : AppColors.bg2,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: important
@@ -1519,10 +1378,8 @@ class _DetailRow extends StatelessWidget {
             width: 88,
             child: Text(
               '$label:',
-              style: TextStyle(
+              style: AppText.etiqueta.copyWith(
                 color: important ? AppColors.teal : AppColors.textSecondary,
-                fontSize: 13,
-                fontWeight: FontWeight.w900,
               ),
             ),
           ),
@@ -1530,11 +1387,9 @@ class _DetailRow extends StatelessWidget {
           Expanded(
             child: Text(
               noData ? 'Sin datos' : value.trim(),
-              style: TextStyle(
+              style:
+                  (important ? AppText.seccion : AppText.cuerpoFuerte).copyWith(
                 color: noData ? AppColors.textHint : AppColors.textPrimary,
-                fontSize: important ? 16 : 14,
-                fontWeight: FontWeight.w900,
-                height: 1.18,
               ),
             ),
           ),
@@ -1548,73 +1403,6 @@ class _InfoItem {
   final String label;
   final String value;
   const _InfoItem(this.label, this.value);
-}
-
-class _InfoChip extends StatelessWidget {
-  final String label;
-  final String value;
-  final bool compact;
-  final bool important;
-
-  const _InfoChip({
-    required this.label,
-    required this.value,
-    required this.compact,
-    this.important = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final normalized = value.trim().toUpperCase();
-    final noData =
-        normalized.isEmpty || normalized == 'SIN DATOS' || normalized == 'NULL';
-    final double labelSize =
-        compact ? (important ? 10.5 : 9.5) : (important ? 12.0 : 10.5);
-    final double valueSize =
-        compact ? (important ? 13.5 : 11.5) : (important ? 15.5 : 12.5);
-
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: compact ? 9 : 12,
-        vertical: compact ? 5 : 7,
-      ),
-      decoration: BoxDecoration(
-        color: important ? AppColors.tealLight : Colors.white,
-        borderRadius: BorderRadius.circular(13),
-        border: Border.all(
-          color: important
-              ? AppColors.teal.withValues(alpha: 0.28)
-              : AppColors.borderDark,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            '$label:',
-            style: TextStyle(
-              color: important ? AppColors.teal : AppColors.textSecondary,
-              fontSize: labelSize,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(width: 5),
-          Text(
-            noData ? 'Sin datos' : value.trim(),
-            maxLines: 1,
-            softWrap: false,
-            overflow: TextOverflow.visible,
-            style: TextStyle(
-              color: noData ? AppColors.textHint : AppColors.textPrimary,
-              fontSize: valueSize,
-              fontWeight: FontWeight.w900,
-              letterSpacing: important ? 0.1 : 0,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _MissingValueException implements Exception {

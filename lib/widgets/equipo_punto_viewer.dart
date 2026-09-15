@@ -2,6 +2,21 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../models/equipo_visual_config.dart';
+import 'decode_imagen.dart';
+
+/// Icono que representa cada eje de medición (H, V o A).
+IconData iconoDeEje(String eje) {
+  switch (eje.toUpperCase()) {
+    case 'H':
+      return Icons.swap_horiz_rounded;
+    case 'V':
+      return Icons.swap_vert_rounded;
+    case 'A':
+      return Icons.keyboard_double_arrow_right_rounded;
+    default:
+      return Icons.location_on_outlined;
+  }
+}
 
 class EquipoPuntoViewer extends StatelessWidget {
   final EquipoVisualConfig config;
@@ -79,11 +94,12 @@ class EquipoPuntoViewer extends StatelessWidget {
                   width: 32,
                   height: 32,
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.14),
+                    color: Colors.white.withValues(alpha: 0.14),
                     shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white.withOpacity(0.30)),
+                    border:
+                        Border.all(color: Colors.white.withValues(alpha: 0.30)),
                   ),
-                  child: Icon(_iconForEje(ejeUpper),
+                  child: Icon(iconoDeEje(ejeUpper),
                       color: Colors.white, size: 19),
                 ),
                 const SizedBox(width: 10),
@@ -92,28 +108,21 @@ class EquipoPuntoViewer extends StatelessWidget {
                     'Punto $puntoMostrado',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w900,
-                    ),
+                    style: AppText.seccion.copyWith(color: Colors.white),
                   ),
                 ),
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: ejeUiColor.withOpacity(0.18),
+                    color: ejeUiColor.withValues(alpha: 0.18),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white.withOpacity(0.28)),
+                    border:
+                        Border.all(color: Colors.white.withValues(alpha: 0.28)),
                   ),
                   child: Text(
                     orientacionMostrada,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w900,
-                    ),
+                    style: AppText.micro.copyWith(color: Colors.white),
                   ),
                 ),
               ],
@@ -138,6 +147,12 @@ class EquipoPuntoViewer extends StatelessWidget {
                           child: Image.asset(
                             puntoVisual.asset,
                             fit: BoxFit.contain,
+                            // El LayoutBuilder ya dio el ancho real: se
+                            // descomprime a eso y no a los 1536 px del JPG.
+                            cacheWidth: anchoDecode(
+                              context,
+                              anchoLogico: imageRect.width,
+                            ),
                             errorBuilder: (_, __, ___) => Center(
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
@@ -151,9 +166,8 @@ class EquipoPuntoViewer extends StatelessWidget {
                                   Text(
                                     puntoVisual.asset,
                                     textAlign: TextAlign.center,
-                                    style: const TextStyle(
+                                    style: AppText.apoyo.copyWith(
                                       color: AppColors.textSecondary,
-                                      fontSize: 10,
                                     ),
                                   ),
                                 ],
@@ -252,18 +266,6 @@ class EquipoPuntoViewer extends StatelessWidget {
     );
   }
 
-  IconData _iconForEje(String eje) {
-    switch (eje.toUpperCase()) {
-      case 'H':
-        return Icons.swap_horiz_rounded;
-      case 'V':
-        return Icons.swap_vert_rounded;
-      case 'A':
-        return Icons.keyboard_double_arrow_right_rounded;
-      default:
-        return Icons.location_on_outlined;
-    }
-  }
 }
 
 class _EquipoImageInfo extends StatelessWidget {
@@ -291,12 +293,12 @@ class _EquipoImageInfo extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.95),
+          color: Colors.white.withValues(alpha: 0.95),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.white.withOpacity(0.70)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.70)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.16),
+              color: Colors.black.withValues(alpha: 0.16),
               blurRadius: 10,
               offset: const Offset(0, 3),
             ),
@@ -323,11 +325,7 @@ class _EquipoImageInfo extends StatelessWidget {
       children: [
         Text(
           '$label:',
-          style: const TextStyle(
-            color: AppColors.textSecondary,
-            fontSize: 10,
-            fontWeight: FontWeight.w900,
-          ),
+          style: AppText.etiqueta.copyWith(color: const Color(0xFF52647E)),
         ),
         const SizedBox(width: 5),
         Flexible(
@@ -335,11 +333,7 @@ class _EquipoImageInfo extends StatelessWidget {
             value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 12,
-              fontWeight: FontWeight.w900,
-            ),
+            style: AppText.cuerpoFuerte.copyWith(color: AppColors.headerTop),
           ),
         ),
       ],
@@ -363,12 +357,12 @@ class _AxisBadge extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.94),
+            color: Colors.white.withValues(alpha: 0.94),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.white.withOpacity(0.60)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.60)),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.14),
+                color: Colors.black.withValues(alpha: 0.14),
                 blurRadius: 8,
                 offset: const Offset(0, 2),
               ),
@@ -414,10 +408,8 @@ class _AxisBadge extends StatelessWidget {
         const SizedBox(width: 5),
         Text(
           label,
-          style: TextStyle(
+          style: AppText.micro.copyWith(
             color: active ? AppColors.headerTop : AppColors.textSecondary,
-            fontSize: 10,
-            fontWeight: FontWeight.w900,
           ),
         ),
       ],
@@ -446,22 +438,14 @@ class _MiniInfo extends StatelessWidget {
         children: [
           Text(
             label,
-            style: const TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-            ),
+            style: AppText.etiqueta.copyWith(color: AppColors.textSecondary),
           ),
           const SizedBox(height: 2),
           Text(
             value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 12,
-              fontWeight: FontWeight.w900,
-            ),
+            style: AppText.dato.copyWith(color: AppColors.textPrimary),
           ),
         ],
       ),
@@ -502,7 +486,7 @@ class _PuntoMedicionPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
 
     final shadowPaint = Paint()
-      ..color = Colors.black.withOpacity(0.28)
+      ..color = Colors.black.withValues(alpha: 0.28)
       ..strokeWidth = 7
       ..strokeCap = StrokeCap.round;
 
@@ -519,7 +503,7 @@ class _PuntoMedicionPainter extends CustomPainter {
     // El punto negro ya viene dibujado exactamente en la imagen del PDF.
     // Aqui solo se dibuja una guia muy ligera para no tapar el numero del punto.
     final haloPaint = Paint()
-      ..color = color.withOpacity(0.22)
+      ..color = color.withValues(alpha: 0.22)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3.0;
     canvas.drawCircle(p, 18, haloPaint);
@@ -572,19 +556,6 @@ class _PuntoMedicionPainter extends CustomPainter {
           (p.dx - r.width * 0.28).clamp(r.left + margin, r.right - margin),
           p.dy,
         );
-    }
-  }
-
-  String _axis3dTag(String eje) {
-    switch (eje.toUpperCase()) {
-      case 'H':
-        return 'H';
-      case 'V':
-        return 'V';
-      case 'A':
-        return 'A';
-      default:
-        return eje.toUpperCase();
     }
   }
 
@@ -667,7 +638,7 @@ class _PuntoMedicionPainter extends CustomPainter {
     );
 
     final shadow = Paint()
-      ..color = Colors.black.withOpacity(0.28)
+      ..color = Colors.black.withValues(alpha: 0.28)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5);
     canvas.drawRRect(rect.shift(const Offset(2, 2)), shadow);
 

@@ -41,13 +41,13 @@ void main() {
   });
 
   test('TemperatureMeasurement conserva decimales y ODT nulo', () {
-    final measurement = TemperatureMeasurement(
+    const measurement = TemperatureMeasurement(
       uuid: 'temp-1',
       localizacion: 12,
       sistema: 'BG-1',
       fecha: '2026-07-22',
       hora: '10:30:00',
-      valores: const {'T1': 41.5, 'T2': 42},
+      valores: {'T1': 41.5, 'T2': 42},
       observaciones: 'Normal',
       responsable: 'Operador',
       cargo: 'MECANICO',
