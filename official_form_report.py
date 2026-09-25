@@ -107,6 +107,22 @@ def _enabled(selected: set[str], service: str) -> bool:
     return "all" in selected or service in selected
 
 
+def repair_ventilator_labels(page: fitz.Page) -> None:
+    """Replace overlapping static labels without removing table borders."""
+    labels = [
+        ((321, 104, 378, 120), "SUBSISTEMA:", 8),
+        ((17, 469, 158, 489), "RADIAL HORIZONTAL", 7),
+        ((160, 469, 269, 489), "RADIAL VERTICAL", 7),
+        ((271, 469, 438, 489), "RADIAL HORIZONTAL", 7),
+        ((440, 469, 597, 489), "RADIAL VERTICAL", 7),
+    ]
+    for rect, _, _ in labels:
+        page.add_redact_annot(fitz.Rect(rect), fill=None)
+    page.apply_redactions(images=0, graphics=0)
+    for rect, label, size in labels:
+        _center(page, rect, label, size)
+
+
 def fill_official_form(
     template_path: Path,
     output_path: Path,
@@ -118,6 +134,8 @@ def fill_official_form(
     points = int(data.get("points") or 1)
     doc = fitz.open(str(template_path))
     page = doc[0]
+    if "Ventilador" in template_name:
+        repair_ventilator_labels(page)
 
     # Los valores del encabezado ocupan el area libre posterior a cada rotulo.
     # Se centran tanto horizontal como verticalmente dentro de su celda.
@@ -130,6 +148,9 @@ def fill_official_form(
     current = data.get("current", {})
     replacement = data.get("replacement", {}) if _enabled(selected, "replacement") else {}
     replacement_y = 237 if template_name == "Motor-Caja-Bomba.pdf" else 221
+    if "Ventilador" in template_name:
+        # Removed-equipment rows start at 218.4, not at the printed text baseline.
+        replacement_y = 218.4
     for idx, name in enumerate(names):
         current_row = current.get(name, {})
         replace_row = replacement.get(name, {})
@@ -179,9 +200,9 @@ def fill_official_form(
     if "Ventilador" in template_name:
         belt = data.get("belt") if _enabled(selected, "belt") else None
         # Las lineas son para escritura; la marca debe quedar sobre ellas, no atravesada.
-        _center(page, (118, 405, 165, 418), "X" if belt is True else "/")
-        _center(page, (194, 405, 241, 418), "X" if belt is False else "/")
-        _center(page, (278, 405, 334, 418), _number(data.get("belt_tension")) if belt is not None else "/")
+        _center(page, (124, 410, 165, 423), "X" if belt is True else "/")
+        _center(page, (187, 410, 219, 423), "X" if belt is False else "/")
+        _center(page, (270, 410, 303, 423), _number(data.get("belt_tension")) if belt is not None else "/")
 
     observation_rect = {
         "Motor-Bomba(A).pdf": (18, 616, 596, 673), "Motor-Bomba(B).pdf": (18, 583, 596, 660),

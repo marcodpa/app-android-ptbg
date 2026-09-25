@@ -29,8 +29,7 @@ class UsbSyncStatus {
       other.requestId == requestId;
 
   @override
-  int get hashCode =>
-      Object.hash(online, rawStatus, label, detail, requestId);
+  int get hashCode => Object.hash(online, rawStatus, label, detail, requestId);
 
   factory UsbSyncStatus.fromValues({
     required String? status,
@@ -39,10 +38,19 @@ class UsbSyncStatus {
     required String? lastSeen,
     String? requestId,
     required DateTime now,
+    DateTime? receivedAt,
     Duration freshFor = const Duration(seconds: 25),
   }) {
     final seenAt = DateTime.tryParse(lastSeen ?? '');
-    final isFresh = seenAt != null && now.difference(seenAt).abs() <= freshFor;
+    // El uploader copia el archivo SIN preservar su fecha: Android asigna
+    // su mtime con el reloj de la tablet. Comparar esa recepcion local con
+    // now evita exigir que los relojes de laptop y tablet esten alineados.
+    // last_seen se conserva como dato de origen; el fallback es para estados
+    // antiguos que solo existen en preferencias, sin archivo de recepcion.
+    final freshnessTime = receivedAt ?? seenAt;
+    final isFresh = seenAt != null &&
+        freshnessTime != null &&
+        now.difference(freshnessTime).abs() <= freshFor;
     final raw = (status ?? '').trim().toUpperCase();
     final isConnectedStatus =
         raw == 'ONLINE' || raw == 'SYNCING' || raw == 'DONE' || raw == 'ERROR';

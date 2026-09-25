@@ -41,6 +41,10 @@ class MariaDb:
     def __init__(self):
         self.conn = sqlite3.connect(':memory:')
         self.conn.row_factory = sqlite3.Row
+        self.conn.create_function('GET_LOCK', 2, lambda *_: 1)
+        self.conn.create_function('RELEASE_LOCK', 1, lambda *_: 1)
+        self.conn.execute("ATTACH DATABASE ':memory:' AS PTBG_FLT")
+        self.conn.execute('CREATE TABLE PTBG_FLT.FLT_CHANGE (ODT INTEGER)')
         cols = ','.join(f'{c} TEXT' for c in uploader.WORK_ORDER_COLUMNS if c != 'ODT')
         self.conn.execute(f'CREATE TABLE MOT_INDICE (ODT INTEGER PRIMARY KEY,{cols})')
         self.fail_commit = False

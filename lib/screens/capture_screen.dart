@@ -95,6 +95,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
               serial: data['serial']?.toString(),
               detail: data['detail']?.toString(),
               lastSeen: data['last_seen']?.toString(),
+              receivedAt: await file.lastModified(),
               now: DateTime.now(),
             );
           }

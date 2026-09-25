@@ -24,6 +24,7 @@ import tempfile
 import threading
 import time
 import traceback
+import filter_sync
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -1618,6 +1619,8 @@ def ensure_work_order_schema(conn: sqlite3.Connection) -> None:
         conn.execute('ALTER TABLE ORDENES_TRABAJO_LOCAL ADD COLUMN limpieza_plato INTEGER NOT NULL DEFAULT 0')
     if 'tablet_origen' not in columns:
         conn.execute('ALTER TABLE ORDENES_TRABAJO_LOCAL ADD COLUMN tablet_origen TEXT')
+    if 'modulo' not in columns:
+        conn.execute("ALTER TABLE ORDENES_TRABAJO_LOCAL ADD COLUMN modulo TEXT NOT NULL DEFAULT 'motores'")
     conn.commit()
 
 
@@ -1628,7 +1631,7 @@ def fetch_pending_work_orders(db_path: Path) -> list[dict]:
         ensure_work_order_schema(conn)
         rows = conn.execute(
             """SELECT * FROM ORDENES_TRABAJO_LOCAL
-            WHERE COALESCE(sincronizado, 0) = 0 ORDER BY created_at ASC"""
+            WHERE COALESCE(sincronizado, 0) = 0 AND modulo='motores' ORDER BY created_at ASC"""
         ).fetchall()
         return [dict(row) for row in rows]
     finally:
@@ -1662,14 +1665,22 @@ def build_work_order_values(row: dict) -> tuple:
 def remap_local_odt(db_path: Path, old_odt: int, new_odt: int) -> None:
     conn = sqlite3.connect(db_path)
     try:
+        order_columns = {str(r[1]).lower() for r in conn.execute('PRAGMA table_info(ORDENES_TRABAJO_LOCAL)')}
+        module_row = conn.execute('SELECT modulo FROM ORDENES_TRABAJO_LOCAL WHERE odt=?', (old_odt,)).fetchone() if 'modulo' in order_columns else None
+        filter_order = bool(module_row and module_row[0] == 'filtros')
         tables = (
             "MEDICIONES_LOCAL", "TEMPERATURAS_LOCAL", "ALINEACIONES_LOCAL",
             "LUBRICACIONES_LOCAL", "CAMBIOS_COUPLING_LOCAL", "REEMPLAZOS_LOCAL",
             "LIMPIEZAS_PLATO_LOCAL",
+            "FILTROS_CAMBIOS_LOCAL",
             "AJUSTES_CORREA_LOCAL", "CHECKLIST_COMPRESOR_LOCAL",
             "CHECKLIST_BLACK_START_LOCAL",
         )
         for table in tables:
+            # Remote filter history may have the same number as an unrelated
+            # provisional motor order. Never remap across domain boundaries.
+            if (table == 'FILTROS_CAMBIOS_LOCAL') != filter_order:
+                continue
             exists = conn.execute(
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
                 (table,),
@@ -1678,7 +1689,8 @@ def remap_local_odt(db_path: Path, old_odt: int, new_odt: int) -> None:
                 continue
             columns = {str(r[1]).lower() for r in conn.execute(f"PRAGMA table_info({table})")}
             if "odt" in columns:
-                conn.execute(f"UPDATE {table} SET odt=? WHERE odt=?", (new_odt, old_odt))
+                pending_only = ' AND sincronizado=0' if 'sincronizado' in columns else ''
+                conn.execute(f"UPDATE {table} SET odt=? WHERE odt=?{pending_only}", (new_odt, old_odt))
         conn.execute(
             "UPDATE ORDENES_TRABAJO_LOCAL SET odt=? WHERE odt=?",
             (new_odt, old_odt),
@@ -1939,6 +1951,10 @@ def fetch_pending_ordenes_reparacion(db_path: Path) -> list[dict]:
 
 def pending_rows_for_display(db_path: Path) -> list[dict]:
     rows = fetch_pending_measurements(db_path)
+    for row in filter_sync.pending(db_path):
+        rows.append({'LOCALIZACION': row['localizacion'], 'FECHA': row['fecha'],
+                     'HORA': row['hora'], 'RMS': None,
+                     'OBSERVACIONES': f"Filtro: {row['elemento']} · ODT {row['odt']} · {row['cantidad']} elementos"})
     for temperature in fetch_pending_temperatures(db_path):
         measured = [
             f"{column}={temperature[column]:g} °C"
@@ -5430,12 +5446,44 @@ def upload_pending_admin_events(
     return summary
 
 
+def has_saved_work_for_order(conn: sqlite3.Connection, odt: int) -> bool:
+    # Checklists legitimately have every MOT_INDICE service flag at zero.
+    # Also preserve real captures whose flags were cleared by an older client.
+    tables = ('MEDICIONES_LOCAL', 'TEMPERATURAS_LOCAL', 'ALINEACIONES_LOCAL',
+              'LUBRICACIONES_LOCAL', 'CAMBIOS_COUPLING_LOCAL', 'AJUSTES_CORREA_LOCAL',
+              'REEMPLAZOS_LOCAL', 'LIMPIEZAS_PLATO_LOCAL',
+              'CHECKLIST_COMPRESOR_LOCAL', 'CHECKLIST_BLACK_START_LOCAL')
+    existing = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    for table in tables:
+        if table not in existing:
+            continue
+        columns = {str(r[1]).lower() for r in conn.execute(f'PRAGMA table_info({table})')}
+        if 'odt' in columns and conn.execute(f'SELECT 1 FROM {table} WHERE odt=? LIMIT 1', (odt,)).fetchone():
+            return True
+    return False
+
+
 def upload_pending_work_orders(
     db_path: Path,
     *,
     log: Callable[[str], None] = print,
 ) -> UploadSummary:
     rows = fetch_pending_work_orders(db_path)
+    # Opening/cancelling a capture can leave a reservation with no services.
+    # Keep that draft locally; it must never become an empty MOT_INDICE row.
+    service_columns = ('vibracion', 'temperatura', 'alineacion', 'lubricacion',
+                       'coupling_rpl', 'correa_ajt', 'reemplazo', 'limpieza_plato')
+    local = sqlite3.connect(db_path)
+    try:
+        empty_orders = [row for row in rows
+                        if not any(int(row.get(c) or 0) for c in service_columns)
+                        and not has_saved_work_for_order(local, int(row['odt']))]
+    finally:
+        local.close()
+    for row in empty_orders:
+        log(f"ODT {row.get('odt')}: borrador sin servicios; no se sube a MOT_INDICE.")
+    empty_ids = {row['odt'] for row in empty_orders}
+    rows = [row for row in rows if row['odt'] not in empty_ids]
     summary = UploadSummary(total=len(rows))
     log(f"Ordenes de trabajo pendientes: {len(rows)}")
     if not rows:
@@ -5455,15 +5503,23 @@ def upload_pending_work_orders(
 
     try:
         with db.cursor() as cursor:
+            # Same lock used by FLT_CHANGE: no concurrent ODT allocation across modules.
+            filter_sync.acquire_odt_lock(cursor)
             for row in rows:
                 odt = int(row.get("odt") or 0)
                 try:
                     origin = normalize_tablet_origin(row.get('tablet_origen'))
                     cursor.execute("SELECT * FROM MOT_INDICE WHERE ODT=%s LIMIT 1", (odt,))
                     existing = cursor.fetchone()
+                    filter_collision = filter_sync.filter_odt_max(cursor, odt)
+                    if existing and filter_collision:
+                        raise RuntimeError(f'ODT {odt} existe en motores y filtros; requiere revisión sin reasignar trabajos confirmados.')
+                    if not existing and filter_collision:
+                        existing = {'_filter_order': True}
                     if existing:
                         same_order = (
-                            int(existing.get("UBICACION") or 0) == int(row.get("ubicacion") or 0)
+                            not existing.get('_filter_order')
+                            and int(existing.get("UBICACION") or 0) == int(row.get("ubicacion") or 0)
                             and str(existing.get("FECHA") or "") == str(row.get("fecha") or "")
                             and str(existing.get("HORA") or "") == str(row.get("hora") or "")
                         )
@@ -5486,6 +5542,7 @@ def upload_pending_work_orders(
                             continue
                         cursor.execute("SELECT COALESCE(MAX(ODT), 0) AS max_odt FROM MOT_INDICE")
                         maximum = int((cursor.fetchone() or {}).get("max_odt") or 0)
+                        maximum = max(maximum, filter_sync.filter_odt_max(cursor))
                         new_odt = max(maximum + 1, odt + 1)
                         local = sqlite3.connect(db_path)
                         try:
@@ -5544,6 +5601,9 @@ def upload_pending_work(
         log('Servicios retenidos: hay ODT pendientes con errores. Corrija y reintente; '
             'no se enviaran servicios asociados a una ODT sin confirmar.')
         return merge_upload_summaries(equipo_nuevo_summary, work_order_summary)
+    filter_summary = UploadSummary(**filter_sync.upload(db_path, connect_mariadb, remap_local_odt, log))
+    # Captures go before admin changes that might disable their catalog branch.
+    filter_catalog_summary = UploadSummary(**filter_sync.upload_catalog(db_path, connect_mariadb, log))
     # An ODT may be remapped above; every service must use the final number.
     checklist_summary = upload_checklists_compresor(db_path, log=log)
     black_start_summary = upload_black_start(db_path, log=log)
@@ -5673,6 +5733,8 @@ def upload_pending_work(
         checklist_summary,
         black_start_summary,
         work_order_summary,
+        filter_summary,
+        filter_catalog_summary,
         plate_summary,
         measurement_summary,
         replacement_summary,
@@ -5739,6 +5801,12 @@ def perform_usb_upload_for_device(
         tablet=device.serial,
         log=log,
     )
+    filter_download_error = ''
+    try:
+        filter_sync.download(local_db, connect_mariadb, log)
+    except Exception as exc:
+        filter_download_error = f' Filtros no actualizados: {exc}'
+        log(f"Catálogo/historial de filtros no actualizado; se conserva copia local: {exc}")
     try:
         sync_latest_measurements_from_mariadb(local_db, log=log)
     except Exception as exc:
@@ -5773,10 +5841,10 @@ def perform_usb_upload_for_device(
     push_tablet_database(device.serial, local_db)
     set_tablet_usb_status(
         device.serial,
-        status="DONE" if summary.failed == 0 else "ERROR",
+        status="DONE" if summary.failed == 0 and not filter_download_error else "ERROR",
         detail=(
             f"Proceso terminado: {summary.uploaded} subidas, "
-            f"{summary.skipped} ya existentes, {summary.failed} errores"
+            f"{summary.skipped} ya existentes, {summary.failed} errores" + filter_download_error
         ),
         tmp_dir=tmp_dir,
         request_id=request_id,
@@ -6121,6 +6189,12 @@ def perform_usb_download_for_device(
     sync_ordenes_reparacion_from_mariadb(local_db, log=log)
     sync_compressor_checklists_from_mariadb(local_db, log=log)
     sync_plate_cleanings_from_mariadb(local_db, log=log)
+    filter_download_error = ''
+    try:
+        filter_sync.download(local_db, connect_mariadb, log)
+    except Exception as exc:
+        filter_download_error = f'Filtros no actualizados: {exc}. Se conserva el catálogo anterior.'
+        log(filter_download_error)
     # Al final, cuando ya bajo todo lo vivo: lo que se borro en la planta se
     # borra tambien de la tablet. Solo aqui, en la DESCARGA: es el unico
     # momento en que el usuario pidio "dejame la tablet como la base".
@@ -6131,12 +6205,12 @@ def perform_usb_download_for_device(
     push_tablet_database(device.serial, local_db)
     set_tablet_usb_status(
         device.serial,
-        status="DONE",
-        detail="Datos de MariaDB descargados correctamente.",
+        status="ERROR" if filter_download_error else "DONE",
+        detail=filter_download_error or "Datos de MariaDB descargados correctamente.",
         tmp_dir=tmp_dir,
         request_id=request_id,
     )
-    log("Datos de MariaDB descargados correctamente en la tablet.")
+    log(filter_download_error or "Datos de MariaDB descargados correctamente en la tablet.")
 
 
 def process_tablet_usb_request(

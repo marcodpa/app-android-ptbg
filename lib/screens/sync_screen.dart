@@ -12,6 +12,7 @@ import '../widgets/widgets.dart';
 import '../widgets/editor_servicio.dart';
 import '../widgets/industrial_navigation.dart';
 import '../db/db_helper.dart';
+import '../db/filter_store.dart';
 import '../models/equipo_visual_config.dart';
 import '../models/lubrication_plan.dart';
 import '../models/temperature_plan.dart';
@@ -49,6 +50,8 @@ class _SyncScreenState extends State<SyncScreen> {
   List<CouplingChange> _couplingPendientes = [];
   List<AjusteCorrea> _correaPendientes = [];
   List<LimpiezaPlato> _platoPendientes = [];
+  List<Map<String, dynamic>> _filtrosPendientes = [];
+  List<Map<String, dynamic>> _catalogoFiltrosPendientes = [];
   // Cambios de estatus/ubicacion de piezas hechos en el inventario. Sin
   // mostrarlos aqui el tecnico no tiene forma de saber que quedaron por subir.
   List<Map<String, dynamic>> _estadoPendientes = [];
@@ -83,6 +86,8 @@ class _SyncScreenState extends State<SyncScreen> {
   Timer? _usbStatusTimer;
 
   int get _pendingTotal =>
+      _filtrosPendientes.length +
+      _catalogoFiltrosPendientes.length +
       _pendientes.length +
       _temperaturePendientes.length +
       _replacementPendientes.length +
@@ -98,6 +103,8 @@ class _SyncScreenState extends State<SyncScreen> {
       _blackStartPendientes.length;
 
   int get _visiblePendingTotal =>
+      _filtrosPendientes.length +
+      _catalogoFiltrosPendientes.length +
       (_pendientes.length > 4 ? 4 : _pendientes.length) +
       (_temperaturePendientes.length > 4 ? 4 : _temperaturePendientes.length) +
       (_replacementPendientes.length > 4 ? 4 : _replacementPendientes.length) +
@@ -156,6 +163,7 @@ class _SyncScreenState extends State<SyncScreen> {
               serial: data['serial']?.toString(),
               detail: data['detail']?.toString(),
               lastSeen: data['last_seen']?.toString(),
+              receivedAt: await file.lastModified(),
               requestId: data['request_id']?.toString(),
               now: DateTime.now(),
             );
@@ -207,6 +215,8 @@ class _SyncScreenState extends State<SyncScreen> {
       final platos =
           await DbHelper.instance.getLimpiezasPlato(pendientes: true);
       final resumenPlatos = await DbHelper.instance.resumenLimpiezasPlato();
+      final filtros = await FilterStore().history(pendingOnly: true);
+      final catalogoFiltros = await FilterStore().catalogRequests();
       final sinc = await DbHelper.instance.getSincronizadasHoy();
       final syncedTemperatures =
           await DbHelper.instance.countSyncedTemperaturesToday();
@@ -262,6 +272,8 @@ class _SyncScreenState extends State<SyncScreen> {
           _couplingPendientes = coupling;
           _correaPendientes = correas;
           _platoPendientes = platos;
+          _filtrosPendientes = filtros;
+          _catalogoFiltrosPendientes = catalogoFiltros;
           _estadoPendientes = estados;
           _ordenPendientes = ordenes;
           _equipoPendientes = equiposNuevos;
@@ -275,6 +287,9 @@ class _SyncScreenState extends State<SyncScreen> {
               syncedCoupling +
               (resumenPlatos['hoy'] ?? 0);
           _errores = errs +
+              [...filtros, ...catalogoFiltros]
+                  .where((r) => (r['error_sync'] ?? '').toString().isNotEmpty)
+                  .length +
               temperatureErrors +
               replacementErrors +
               alignmentErrors +
@@ -1599,6 +1614,22 @@ class _SyncScreenState extends State<SyncScreen> {
                     ),
                     child: Column(
                       children: [
+                        ..._filtrosPendientes.map((r) => _FilaPendiente(
+                            icono: Icons.filter_alt_outlined,
+                            color: AppColors.teal,
+                            tipo: 'cambio de filtro',
+                            titulo: '${r['elemento']}',
+                            detalle:
+                                '${r['fecha']} ${r['hora']} · ODT ${r['odt']} · ${r['cantidad']} elementos',
+                            error: r['error_sync'] as String?)),
+                        ..._catalogoFiltrosPendientes.map((r) => _FilaPendiente(
+                            icono: Icons.settings_outlined,
+                            color: AppColors.teal,
+                            tipo: 'catálogo de filtros',
+                            titulo: 'Catálogo de filtros: ${r['accion']}',
+                            detalle:
+                                '${r['responsable']} · Pendiente de validación en planta',
+                            error: r['error_sync'] as String?)),
                         ..._pendientes.map(
                           (m) => _PendRow(
                             m: m,

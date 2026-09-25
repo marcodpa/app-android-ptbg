@@ -2,6 +2,94 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:scv_ptbg/models/usb_sync_status.dart';
 
 void main() {
+  final tabletNow = DateTime(2026, 9, 22, 10);
+
+  UsbSyncStatus receivedStatus({
+    required DateTime laptopTime,
+    required DateTime receivedAt,
+    String status = 'ONLINE',
+  }) =>
+      UsbSyncStatus.fromValues(
+        status: status,
+        serial: 'TABR9Pro0000017971',
+        detail: 'Laptop conectada',
+        lastSeen: laptopTime.toIso8601String(),
+        receivedAt: receivedAt,
+        now: tabletNow,
+        requestId: 'usb-test',
+      );
+
+  for (final offset in [-86400, -3600, -33, 33, 3600, 86400]) {
+    test('recepcion USB reciente admite desfase de $offset segundos', () {
+      final status = receivedStatus(
+        laptopTime: tabletNow.add(Duration(seconds: offset)),
+        receivedAt: tabletNow.subtract(const Duration(seconds: 3)),
+      );
+      expect(status.online, isTrue);
+      expect(status.lastSeen, tabletNow.add(Duration(seconds: offset)));
+      expect(status.requestId, 'usb-test');
+    });
+  }
+
+  test('archivo vencido no revive aunque la hora de laptop parezca reciente',
+      () {
+    final status = receivedStatus(
+      laptopTime: tabletNow,
+      receivedAt: tabletNow.subtract(const Duration(seconds: 26)),
+    );
+    expect(status.online, isFalse);
+  });
+
+  test('cable desconectado vence y otra señal local recupera la conexion', () {
+    final laptopTime = tabletNow.subtract(const Duration(hours: 4));
+    for (final age in [3, 25, 26, 120, 1]) {
+      expect(
+          receivedStatus(
+            laptopTime: laptopTime,
+            receivedAt: tabletNow.subtract(Duration(seconds: age)),
+          ).online,
+          age <= 25);
+    }
+  });
+
+  test('OFFLINE o estado desconocido no se aceptan por tener archivo reciente',
+      () {
+    for (final raw in ['OFFLINE', '', 'INVALID']) {
+      expect(
+          receivedStatus(
+            laptopTime: tabletNow,
+            receivedAt: tabletNow,
+            status: raw,
+          ).online,
+          isFalse);
+    }
+  });
+
+  test('SYNCING DONE y ERROR preservan conexion y respuesta con desfase', () {
+    for (final raw in ['SYNCING', 'DONE', 'ERROR']) {
+      final status = receivedStatus(
+        laptopTime: tabletNow.add(const Duration(hours: 8)),
+        receivedAt: tabletNow,
+        status: raw,
+      );
+      expect(status.online, isTrue);
+      expect(status.label, raw);
+      expect(status.requestId, 'usb-test');
+    }
+  });
+
+  test('timestamp malformado no se acepta aunque el archivo sea reciente', () {
+    final status = UsbSyncStatus.fromValues(
+      status: 'ONLINE',
+      serial: null,
+      detail: null,
+      lastSeen: 'invalid',
+      receivedAt: tabletNow,
+      now: tabletNow,
+    );
+    expect(status.online, isFalse);
+  });
+
   test('muestra online cuando el subidor USB marco la tablet recientemente',
       () {
     final now = DateTime(2026, 7, 6, 9, 30);

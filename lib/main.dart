@@ -7,12 +7,12 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'theme.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/filters_screen.dart';
 import 'screens/qr_screen.dart';
 import 'screens/sync_screen.dart';
 import 'screens/ruta_screen.dart';
 import 'screens/todos_equipos_screen.dart';
 import 'screens/mediciones_screen.dart';
-import 'screens/mapa_planta_screen.dart';
 import 'screens/ajustes_screen.dart';
 import 'screens/capture_screen.dart';
 import 'models/models.dart';
@@ -74,6 +74,8 @@ class ScvApp extends StatelessWidget {
                   return _fade(const LoginScreen());
                 case '/home':
                   return _tab(const HomeScreen());
+                case '/filtros':
+                  return _tab(const FiltersScreen());
                 case '/qr':
                   return _tab(const QrScreen());
                 case '/sync':
@@ -81,7 +83,9 @@ class ScvApp extends StatelessWidget {
                 case '/equipos':
                   return _tab(const TodosEquiposScreen());
                 case '/mapa':
-                  return _tab(const MapaPlantaScreen());
+                  // Desactivado temporalmente en todos los dispositivos.
+                  // Un enlace antiguo vuelve al inicio sin abrir el plano.
+                  return _tab(const HomeScreen());
                 case '/ruta':
                   return _tab(const RutaScreen());
                 case '/mediciones':

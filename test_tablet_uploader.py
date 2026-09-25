@@ -1006,6 +1006,8 @@ class TabletUploaderTests(unittest.TestCase):
             def execute(self, sql, params=None):
                 self.calls.append((" ".join(sql.split()), params))
             def fetchone(self):
+                if 'GET_LOCK' in self.calls[-1][0]:
+                    return {'acquired': 1}
                 return None
             def __enter__(self): return self
             def __exit__(self, *args): return False

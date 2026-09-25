@@ -5,6 +5,7 @@ import '../models/orden_reparacion.dart';
 import '../models/pendientes_sync.dart';
 import '../theme.dart';
 import 'industrial_header_style.dart';
+import 'filter_cartridge_icon.dart';
 
 class IndustrialShell extends StatelessWidget {
   const IndustrialShell({
@@ -89,46 +90,55 @@ class _IndustrialSideRailState extends State<IndustrialSideRail> {
                 color: background,
                 border: Border(right: BorderSide(color: border)),
               ),
-              child: Column(children: [
-                const SizedBox(height: 8),
-                _item(context, Icons.blur_on_rounded, ''),
-                const SizedBox(height: 24),
-                _item(context, Icons.home_rounded, '/home'),
-                _item(context, Icons.qr_code_scanner_rounded, '/qr'),
-                // El mapa va junto al QR y no al final: los dos responden a
-                // la misma pregunta —cual es este equipo— cuando se esta
-                // parado delante de la maquina.
-                _item(context, Icons.map_outlined, '/mapa'),
-                // Lleva al menu de equipos, no directo a los generales: desde
-                // ahi se elige entre conjuntos e inventario de piezas.
-                // Escucha el valor compartido: al crear o cerrar una orden el
-                // globo cambia al instante, sin navegar ni sincronizar.
-                ValueListenableBuilder<int>(
-                  valueListenable: ordenesAbiertasNotifier,
-                  builder: (context, abiertas, _) => _item(
-                    context,
-                    Icons.precision_manufacturing_outlined,
-                    '/equipos',
-                    badge: abiertas,
-                  ),
-                ),
-                // Punto rojo sin numero: no importa si son 2 o 30 trabajos, lo
-                // que importa es que hay algo guardado solo en esta tablet.
-                ValueListenableBuilder<int>(
-                  valueListenable: pendientesSyncNotifier,
-                  builder: (context, pendientes, _) => _item(
-                    context,
-                    Icons.sync_rounded,
-                    '/sync',
-                    punto: pendientes > 0,
-                  ),
-                ),
-                _item(context, Icons.history_rounded, '/mediciones'),
-                const Spacer(),
-                _themeToggle(dark),
-                _item(context, Icons.settings_outlined, '/ajustes'),
-                const SizedBox(height: 12),
-              ]),
+              child: LayoutBuilder(
+                  builder: (context, constraints) => SingleChildScrollView(
+                      child: ConstrainedBox(
+                          constraints:
+                              BoxConstraints(minHeight: constraints.maxHeight),
+                          child: IntrinsicHeight(
+                              child: Column(children: [
+                            const SizedBox(height: 8),
+                            _item(context, Icons.blur_on_rounded, ''),
+                            const SizedBox(height: 24),
+                            _item(context, Icons.home_rounded, '/home'),
+                            _item(
+                                context, Icons.qr_code_scanner_rounded, '/qr'),
+                            // Lleva al menu de equipos, no directo a los generales: desde
+                            // ahi se elige entre conjuntos e inventario de piezas.
+                            // Escucha el valor compartido: al crear o cerrar una orden el
+                            // globo cambia al instante, sin navegar ni sincronizar.
+                            ValueListenableBuilder<int>(
+                              valueListenable: ordenesAbiertasNotifier,
+                              builder: (context, abiertas, _) => _item(
+                                context,
+                                Icons.precision_manufacturing_outlined,
+                                '/equipos',
+                                badge: abiertas,
+                              ),
+                            ),
+                            // Punto rojo sin numero: no importa si son 2 o 30 trabajos, lo
+                            // que importa es que hay algo guardado solo en esta tablet.
+                            ValueListenableBuilder<int>(
+                              valueListenable: pendientesSyncNotifier,
+                              builder: (context, pendientes, _) => _item(
+                                context,
+                                Icons.sync_rounded,
+                                '/sync',
+                                punto: pendientes > 0,
+                              ),
+                            ),
+                            _item(
+                                context, Icons.history_rounded, '/mediciones'),
+                            Tooltip(
+                                message: 'Cambio de filtros',
+                                child: _item(context, null, '/filtros',
+                                    illustration: (color) => Center(
+                                        child: FilterCartridgeIcon(color: color)))),
+                            const Spacer(),
+                            _themeToggle(dark),
+                            _item(context, Icons.settings_outlined, '/ajustes'),
+                            const SizedBox(height: 12),
+                          ]))))),
             ),
           ),
         );
@@ -166,13 +176,17 @@ class _IndustrialSideRailState extends State<IndustrialSideRail> {
 
   Widget _item(
     BuildContext context,
-    IconData icon,
+    IconData? icon,
     String route, {
     int badge = 0,
     bool punto = false,
+    Widget Function(Color)? illustration,
   }) {
     final active = route.isNotEmpty && activeRoute == route;
     final dark = esterThemeController.isDark;
+    final iconColor = active
+        ? AppColors.teal
+        : dark ? const Color(0xFF43658D) : const Color(0xFF52749C);
     // El borde del globo usa el color de la barra para que se recorte limpio
     // sobre el icono.
     final fondoBarra = dark ? const Color(0xFF08152D) : Colors.white;
@@ -196,14 +210,10 @@ class _IndustrialSideRailState extends State<IndustrialSideRail> {
                     ? Border.all(color: AppColors.teal.withValues(alpha: .4))
                     : null,
               ),
-              child: Icon(
+              child: illustration?.call(iconColor) ?? Icon(
                 icon,
                 size: 21,
-                color: active
-                    ? AppColors.teal
-                    : dark
-                        ? const Color(0xFF43658D)
-                        : const Color(0xFF52749C),
+                color: iconColor,
               ),
             ),
           ),

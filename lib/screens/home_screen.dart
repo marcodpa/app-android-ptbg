@@ -15,6 +15,7 @@ import 'black_start_screen.dart';
 import 'equipment_history_screen.dart';
 import 'limpieza_plato_screen.dart';
 import '../widgets/industrial_navigation.dart';
+import '../widgets/filter_visuals.dart';
 import '../theme.dart';
 import '../widgets/avisos.dart';
 
@@ -99,6 +100,7 @@ class _HomeScreenState extends State<HomeScreen> {
               serial: data['serial']?.toString(),
               detail: data['detail']?.toString(),
               lastSeen: data['last_seen']?.toString(),
+              receivedAt: await file.lastModified(),
               requestId: data['request_id']?.toString(),
               now: DateTime.now(),
             );
@@ -340,6 +342,19 @@ class _HomeScreenState extends State<HomeScreen> {
                     _profileAndStats(),
                     const SizedBox(height: 12),
                     _referenceModules(),
+                    const SizedBox(height: 12),
+                    Theme(
+                      data: FilterVisualTheme.from(Theme.of(context)),
+                      child: FilterVisualCard(
+                        key: const ValueKey('home-filter-module'),
+                        flux: true,
+                        kind: FilterArt.cartridge,
+                        title: 'Cambio de filtros',
+                        detail: 'Sistemas, filtros y registro de cambios',
+                        label: 'Abrir módulo',
+                        onTap: () => _abrir('/filtros'),
+                      ),
+                    ),
                     const SizedBox(height: 14),
                     _notaCard(),
                   ],
@@ -375,7 +390,8 @@ class _HomeScreenState extends State<HomeScreen> {
       );
 
   Widget _profileAndStats() => SizedBox(
-        height: 116,
+        // Keep the two summary cards readable when labels wrap in portrait.
+        height: 160 * MediaQuery.textScalerOf(context).scale(14) / 14,
         child: Row(children: <Widget>[
           Expanded(
               flex: 5,
@@ -500,14 +516,6 @@ class _HomeScreenState extends State<HomeScreen> {
                           icon: Icons.sync_rounded,
                           accent: warning,
                           onTap: () => _abrir('/sync'))),
-                  const SizedBox(width: 9),
-                  Expanded(
-                      child: _moduleCard(
-                          title: 'Mapa de la planta',
-                          subtitle: 'Ubicar equipos',
-                          icon: Icons.map_outlined,
-                          accent: const Color(0xFF8AB4F8),
-                          onTap: () => _abrir('/mapa'))),
                 ])),
               ])),
         ]),

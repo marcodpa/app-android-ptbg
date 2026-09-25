@@ -21,6 +21,9 @@ import '../models/coupling_change.dart';
 import '../models/work_order.dart';
 import '../models/operation_flow.dart';
 import '../services/tablet_identity.dart';
+import 'filter_store.dart';
+import 'filter_seed.dart';
+import 'recent_services.dart';
 
 class DbHelper {
   static final DbHelper instance = DbHelper._();
@@ -45,11 +48,12 @@ class DbHelper {
     final path = join(await getDatabasesPath(), 'scv_ptbg.db');
     return openDatabase(
       path,
-      version: 12,
+      version: 13,
       onCreate: _create,
       onUpgrade: _upgrade,
       onOpen: (db) async {
         await _ensureSchema(db);
+        await db.transaction((txn) => FilterSeed.ensureInitialCatalog(txn));
       },
     );
   }
@@ -195,6 +199,8 @@ class DbHelper {
     // No backfill: the current device is not evidence of a historic origin.
     await _addColumnIfMissing(
         db, 'ORDENES_TRABAJO_LOCAL', 'tablet_origen', 'TEXT');
+    await _addColumnIfMissing(db, 'ORDENES_TRABAJO_LOCAL', 'modulo',
+        "TEXT NOT NULL DEFAULT 'motores'");
     await db.execute('''CREATE TABLE IF NOT EXISTS LIMPIEZAS_PLATO_LOCAL (
       uuid TEXT PRIMARY KEY, localizacion INTEGER NOT NULL,
       fecha TEXT NOT NULL, hora TEXT NOT NULL,
@@ -974,6 +980,8 @@ class DbHelper {
     'CAMBIOS_COUPLING_LOCAL',
     'AJUSTES_CORREA_LOCAL',
     'LIMPIEZAS_PLATO_LOCAL',
+    'FILTROS_CAMBIOS_LOCAL',
+    'FILTROS_CATALOGO_PENDING',
     'CAMBIOS_ESTADO_LOCAL',
     'ORDENES_REPARACION_LOCAL',
     'EQUIPOS_NUEVOS_LOCAL',
@@ -981,55 +989,14 @@ class DbHelper {
     'CHECKLIST_BLACK_START_LOCAL',
   ];
 
-  /// Los ultimos trabajos que SI subieron a la planta.
-  ///
-  /// Es el reverso de [countPendientesSync]: aquella cuenta lo que falta,
-  /// esta confirma lo que llego. Sin esto el tecnico sincroniza y su trabajo
-  /// desaparece de la pantalla sin decirle que quedo registrado.
-  ///
-  /// Va en una sola consulta con UNION ALL en vez de ocho consultas y un
-  /// ordenamiento en Dart: para quedarse con cuatro filas no vale la pena
-  /// traer a memoria todo el historico de ocho tablas.
-  ///
-  /// Ordena por texto porque fecha y hora se guardan en ISO
-  /// (`2026-08-25`, `08:15:07`), donde el orden alfabetico y el cronologico
-  /// son el mismo. Si algun dia se guardaran como `25/08/2026`, esto ordena
-  /// mal en silencio.
+  /// Ultimos servicios confirmados: las mediciones se leen del espejo
+  /// descargado de planta, no de las capturas hechas en esta tablet.
   Future<List<ServicioReciente>> serviciosRecientes({int limite = 4}) async {
     final db = await database;
-    const fuentes = <String, String>{
-      'vibracion': 'MEDICIONES_LOCAL',
-      'temperatura': 'TEMPERATURAS_LOCAL',
-      'lubricacion': 'LUBRICACIONES_LOCAL',
-      'alineacion': 'ALINEACIONES_LOCAL',
-      'reemplazo': 'REEMPLAZOS_LOCAL',
-      'coupling': 'CAMBIOS_COUPLING_LOCAL',
-      'ajuste_correa': 'AJUSTES_CORREA_LOCAL',
-      'limpieza_plato': 'LIMPIEZAS_PLATO_LOCAL',
-      'checklist_compresor': 'CHECKLIST_COMPRESOR_LOCAL',
-    };
-    final partes = fuentes.entries
-        .map((e) => "SELECT '${e.key}' AS servicio, localizacion, fecha, hora "
-            'FROM ${e.value} WHERE sincronizado = 1')
-        .toList();
-    // El black start no tiene localizacion: es uno solo en la planta y su
-    // registro no cuelga de ningun equipo del inventario.
-    partes.add("SELECT 'black_start' AS servicio, NULL AS localizacion, "
-        'fecha, hora FROM CHECKLIST_BLACK_START_LOCAL WHERE sincronizado = 1');
-
     try {
-      final filas = await db.rawQuery(
-        '${partes.join(' UNION ALL ')} '
-        'ORDER BY fecha DESC, hora DESC LIMIT ?',
-        [limite],
-      );
-      return filas
-          .map(ServicioReciente.deFila)
-          .whereType<ServicioReciente>()
-          .toList();
+      return await RecentServices.read(db, limit: limite);
     } catch (_) {
-      // Una instalacion nueva puede no tener alguna de las tablas todavia.
-      // Quedarse sin la lista de recientes no justifica tumbar el inicio.
+      // Una lectura informativa fallida no debe tumbar el inicio.
       return const [];
     }
   }
@@ -1485,6 +1452,7 @@ class DbHelper {
   }
 
   Future<void> _ensureSchema(Database db) async {
+    await FilterStore.ensureSchema(db);
     await _createRemoteMeasurementTable(db);
     await _createReplacementTable(db);
     await _createTemperatureTables(db);
@@ -2513,8 +2481,8 @@ class DbHelper {
     return db.query(
       'ORDENES_TRABAJO_LOCAL',
       where: soloConServicios
-          ? 'ubicacion = ? AND ($filtroServicios)'
-          : 'ubicacion = ?',
+          ? "ubicacion = ? AND modulo = 'motores' AND ($filtroServicios)"
+          : "ubicacion = ? AND modulo = 'motores'",
       whereArgs: [localizacion],
       orderBy: 'created_at DESC, odt DESC',
       limit: limit,

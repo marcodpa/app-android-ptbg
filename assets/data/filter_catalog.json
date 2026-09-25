@@ -1,0 +1,821 @@
+{
+  "version": "csv-2026-09-21",
+  "source": "MDB_SYSTEM (1).csv + MDB_SUBSYSTEM.csv + FLT_ELEMENTS.csv",
+  "systems": [
+    {
+      "ID": 1,
+      "SISTEMA": "TURBOGENERADOR_CT_GTG_001",
+      "CODE_SYS": 1,
+      "PTBG_FLT": 1
+    },
+    {
+      "ID": 2,
+      "SISTEMA": "TURBOGENERADOR_CT_GTG_002",
+      "CODE_SYS": 2,
+      "PTBG_FLT": 1
+    },
+    {
+      "ID": 3,
+      "SISTEMA": "COMBUSTIBLE DIESEL",
+      "CODE_SYS": 3,
+      "PTBG_FLT": 1
+    },
+    {
+      "ID": 4,
+      "SISTEMA": "AGUA",
+      "CODE_SYS": 4,
+      "PTBG_FLT": 1
+    },
+    {
+      "ID": 5,
+      "SISTEMA": "AIRE COMPRIMIDO",
+      "CODE_SYS": 5,
+      "PTBG_FLT": 0
+    },
+    {
+      "ID": 6,
+      "SISTEMA": "ELECTRICO",
+      "CODE_SYS": 6,
+      "PTBG_FLT": 0
+    },
+    {
+      "ID": 7,
+      "SISTEMA": "DEPOSITOS BAJO GRANDE",
+      "CODE_SYS": 7,
+      "PTBG_FLT": 0
+    }
+  ],
+  "subsystems": [
+    {
+      "ID": 1,
+      "CODE_SYS": 1,
+      "NAME_SUB_SYS": "AIRE PARA VENTILACION Y COMBUSTION",
+      "CODE_SUB_SYS": 1,
+      "PTBG_FLT": 1
+    },
+    {
+      "ID": 2,
+      "CODE_SYS": 1,
+      "NAME_SUB_SYS": "ARRANCADOR HIDRAULICO",
+      "CODE_SUB_SYS": 2,
+      "PTBG_FLT": 1
+    },
+    {
+      "ID": 3,
+      "CODE_SYS": 1,
+      "NAME_SUB_SYS": "COMBUSTIBLE LIQUIDO",
+      "CODE_SUB_SYS": 3,
+      "PTBG_FLT": 1
+    },
+    {
+      "ID": 4,
+      "CODE_SYS": 1,
+      "NAME_SUB_SYS": "LUBRICACION GENERADOR",
+      "CODE_SUB_SYS": 4,
+      "PTBG_FLT": 1
+    },
+    {
+      "ID": 5,
+      "CODE_SYS": 1,
+      "NAME_SUB_SYS": "LUBRICACION TURBINA",
+      "CODE_SUB_SYS": 5,
+      "PTBG_FLT": 1
+    },
+    {
+      "ID": 6,
+      "CODE_SYS": 1,
+      "NAME_SUB_SYS": "SPRINT",
+      "CODE_SUB_SYS": 6,
+      "PTBG_FLT": 1
+    },
+    {
+      "ID": 21,
+      "CODE_SYS": 1,
+      "NAME_SUB_SYS": "INYECCION DE AGUA NOX",
+      "CODE_SUB_SYS": 7,
+      "PTBG_FLT": 0
+    },
+    {
+      "ID": 22,
+      "CODE_SYS": 1,
+      "NAME_SUB_SYS": "LAVADO CON AGUA AXIAL",
+      "CODE_SUB_SYS": 8,
+      "PTBG_FLT": 0
+    },
+    {
+      "ID": 23,
+      "CODE_SYS": 1,
+      "NAME_SUB_SYS": "TURBINA BG1",
+      "CODE_SUB_SYS": 9,
+      "PTBG_FLT": 0
+    },
+    {
+      "ID": 7,
+      "CODE_SYS": 2,
+      "NAME_SUB_SYS": "AIRE PARA VENTILACION Y COMBUSTION",
+      "CODE_SUB_SYS": 10,
+      "PTBG_FLT": 1
+    },
+    {
+      "ID": 8,
+      "CODE_SYS": 2,
+      "NAME_SUB_SYS": "ARRANCADOR HIDRAULICO",
+      "CODE_SUB_SYS": 11,
+      "PTBG_FLT": 1
+    },
+    {
+      "ID": 9,
+      "CODE_SYS": 2,
+      "NAME_SUB_SYS": "COMBUSTIBLE LIQUIDO",
+      "CODE_SUB_SYS": 12,
+      "PTBG_FLT": 1
+    },
+    {
+      "ID": 10,
+      "CODE_SYS": 2,
+      "NAME_SUB_SYS": "LUBRICACION GENERADOR",
+      "CODE_SUB_SYS": 13,
+      "PTBG_FLT": 1
+    },
+    {
+      "ID": 11,
+      "CODE_SYS": 2,
+      "NAME_SUB_SYS": "LUBRICACION TURBINA",
+      "CODE_SUB_SYS": 14,
+      "PTBG_FLT": 1
+    },
+    {
+      "ID": 12,
+      "CODE_SYS": 2,
+      "NAME_SUB_SYS": "SPRINT",
+      "CODE_SUB_SYS": 15,
+      "PTBG_FLT": 1
+    },
+    {
+      "ID": 24,
+      "CODE_SYS": 2,
+      "NAME_SUB_SYS": "INYECCION DE AGUA NOX",
+      "CODE_SUB_SYS": 16,
+      "PTBG_FLT": 0
+    },
+    {
+      "ID": 25,
+      "CODE_SYS": 2,
+      "NAME_SUB_SYS": "LAVADO CON AGUA AXIAL",
+      "CODE_SUB_SYS": 17,
+      "PTBG_FLT": 0
+    },
+    {
+      "ID": 13,
+      "CODE_SYS": 2,
+      "NAME_SUB_SYS": "TURBINA BG2",
+      "CODE_SUB_SYS": 18,
+      "PTBG_FLT": 0
+    },
+    {
+      "ID": 14,
+      "CODE_SYS": 3,
+      "NAME_SUB_SYS": "COMBUSTIBLE TRATADO ENVIO COMBUSTIBLE",
+      "CODE_SUB_SYS": 19,
+      "PTBG_FLT": 1
+    },
+    {
+      "ID": 26,
+      "CODE_SYS": 3,
+      "NAME_SUB_SYS": "COMBUSTIBLE NO TRATADO",
+      "CODE_SUB_SYS": 20,
+      "PTBG_FLT": 0
+    },
+    {
+      "ID": 27,
+      "CODE_SYS": 3,
+      "NAME_SUB_SYS": "TRATAMIENTO DE COMBUSTIBLE",
+      "CODE_SUB_SYS": 21,
+      "PTBG_FLT": 0
+    },
+    {
+      "ID": 15,
+      "CODE_SYS": 4,
+      "NAME_SUB_SYS": "AGUA DE SERVICIO",
+      "CODE_SUB_SYS": 22,
+      "PTBG_FLT": 1
+    },
+    {
+      "ID": 16,
+      "CODE_SYS": 4,
+      "NAME_SUB_SYS": "AGUA DESMINERALIZADA",
+      "CODE_SUB_SYS": 23,
+      "PTBG_FLT": 1
+    },
+    {
+      "ID": 17,
+      "CODE_SYS": 4,
+      "NAME_SUB_SYS": "CONTRA INCENDIO",
+      "CODE_SUB_SYS": 24,
+      "PTBG_FLT": 1
+    },
+    {
+      "ID": 18,
+      "CODE_SYS": 4,
+      "NAME_SUB_SYS": "AGUAS SERVIDAS",
+      "CODE_SUB_SYS": 25,
+      "PTBG_FLT": 0
+    },
+    {
+      "ID": 19,
+      "CODE_SYS": 4,
+      "NAME_SUB_SYS": "AGUAS ACEITOSA",
+      "CODE_SUB_SYS": 26,
+      "PTBG_FLT": 0
+    },
+    {
+      "ID": 20,
+      "CODE_SYS": 4,
+      "NAME_SUB_SYS": "AGUA CRUDA",
+      "CODE_SUB_SYS": 27,
+      "PTBG_FLT": 0
+    },
+    {
+      "ID": 28,
+      "CODE_SYS": 5,
+      "NAME_SUB_SYS": "SISTEMA DE AIRE INSTRUMENTOS",
+      "CODE_SUB_SYS": 28,
+      "PTBG_FLT": 0
+    },
+    {
+      "ID": 29,
+      "CODE_SYS": 5,
+      "NAME_SUB_SYS": "SISTEMA DE AIRE USO GENERAL",
+      "CODE_SUB_SYS": 29,
+      "PTBG_FLT": 0
+    },
+    {
+      "ID": 30,
+      "CODE_SYS": 6,
+      "NAME_SUB_SYS": "GENERADOR DE EMERGENCIA BALCKSTART",
+      "CODE_SUB_SYS": 30,
+      "PTBG_FLT": 0
+    },
+    {
+      "ID": 31,
+      "CODE_SYS": 7,
+      "NAME_SUB_SYS": "TALLERES",
+      "CODE_SUB_SYS": 31,
+      "PTBG_FLT": 0
+    }
+  ],
+  "elements": [
+    {
+      "ID": 1,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 1,
+      "CODE_SUB_SYS": 1,
+      "ELEMENTO": "FILTRO DE AIRE CASA DE FILTROS",
+      "CANTIDAD": 152,
+      "LOCALIZACION": 1,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 2,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 1,
+      "CODE_SUB_SYS": 1,
+      "ELEMENTO": "MANTAS DE AIRE COMBUSTION Y VENTILACION",
+      "CANTIDAD": 152,
+      "LOCALIZACION": 2,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 3,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 1,
+      "CODE_SUB_SYS": 1,
+      "ELEMENTO": "PREFILTROS DE AIRE DE CASA DE FILTROS",
+      "CANTIDAD": 160,
+      "LOCALIZACION": 3,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 4,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 1,
+      "CODE_SUB_SYS": 2,
+      "ELEMENTO": "FILTRO DE BOMBA DE CARGA",
+      "CANTIDAD": 1,
+      "LOCALIZACION": 4,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 5,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 1,
+      "CODE_SUB_SYS": 2,
+      "ELEMENTO": "FILTRO DEL SISTEMA HIDRAULICO DE LA TURBINA",
+      "CANTIDAD": 1,
+      "LOCALIZACION": 5,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 6,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 1,
+      "CODE_SUB_SYS": 2,
+      "ELEMENTO": "FILTRO DE RETORNO DE BAJA PRESION",
+      "CANTIDAD": 1,
+      "LOCALIZACION": 6,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 7,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 1,
+      "CODE_SUB_SYS": 2,
+      "ELEMENTO": "FILTRO DE RETORNO DE VALVULA DE ALIVIO Y DESAGUE DE CUBIERTA",
+      "CANTIDAD": 1,
+      "LOCALIZACION": 7,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 8,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 1,
+      "CODE_SUB_SYS": 3,
+      "ELEMENTO": "FILTRO PALL COMBUSTIBLE",
+      "CANTIDAD": 1,
+      "LOCALIZACION": 8,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 9,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 1,
+      "CODE_SUB_SYS": 4,
+      "ELEMENTO": "FILTRO ACEITE PALL LUBRICACION GENERADOR MODULO A",
+      "CANTIDAD": 1,
+      "LOCALIZACION": 9,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 10,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 1,
+      "CODE_SUB_SYS": 4,
+      "ELEMENTO": "FILTRO ACEITE PALL LUBRICACION GENERADOR MODULO B",
+      "CANTIDAD": 1,
+      "LOCALIZACION": 10,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 11,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 1,
+      "CODE_SUB_SYS": 4,
+      "ELEMENTO": "FILTRO DE DESCARGA BOMBA JACKING",
+      "CANTIDAD": 4,
+      "LOCALIZACION": 11,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 12,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 1,
+      "CODE_SUB_SYS": 5,
+      "ELEMENTO": "FILTRO SCAVENGE MODULO A",
+      "CANTIDAD": 1,
+      "LOCALIZACION": 12,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 13,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 1,
+      "CODE_SUB_SYS": 5,
+      "ELEMENTO": "FILTRO SCAVENGE MODULO B",
+      "CANTIDAD": 1,
+      "LOCALIZACION": 13,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 14,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 1,
+      "CODE_SUB_SYS": 5,
+      "ELEMENTO": "FILTRO SUPPLY MODULO A",
+      "CANTIDAD": 1,
+      "LOCALIZACION": 14,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 15,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 1,
+      "CODE_SUB_SYS": 5,
+      "ELEMENTO": "FILTRO SUPPLY MODULO B",
+      "CANTIDAD": 1,
+      "LOCALIZACION": 15,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 16,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 1,
+      "CODE_SUB_SYS": 5,
+      "ELEMENTO": "FILTRO DE ACEITE DE TURBINA - GEOMETRIA VARIABLE",
+      "CANTIDAD": 1,
+      "LOCALIZACION": 16,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 17,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 1,
+      "CODE_SUB_SYS": 5,
+      "ELEMENTO": "FILTRO DOLLINGER ACEITE TURBINA",
+      "CANTIDAD": 2,
+      "LOCALIZACION": 17,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 18,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 1,
+      "CODE_SUB_SYS": 6,
+      "ELEMENTO": "FILTRO SPRINT",
+      "CANTIDAD": 1,
+      "LOCALIZACION": 18,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 19,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 2,
+      "CODE_SUB_SYS": 10,
+      "ELEMENTO": "FILTRO DE AIRE CASA DE FILTROS",
+      "CANTIDAD": 152,
+      "LOCALIZACION": 19,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 20,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 2,
+      "CODE_SUB_SYS": 10,
+      "ELEMENTO": "MANTAS DE AIRE COMBUSTION Y VENTILACION",
+      "CANTIDAD": 152,
+      "LOCALIZACION": 20,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 21,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 2,
+      "CODE_SUB_SYS": 10,
+      "ELEMENTO": "PREFILTROS DE AIRE DE CASA DE FILTROS",
+      "CANTIDAD": 160,
+      "LOCALIZACION": 21,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 22,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 2,
+      "CODE_SUB_SYS": 11,
+      "ELEMENTO": "FILTRO DE BOMBA DE CARGA",
+      "CANTIDAD": 1,
+      "LOCALIZACION": 22,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 23,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 2,
+      "CODE_SUB_SYS": 11,
+      "ELEMENTO": "FILTRO DEL SISTEMA HIDRAULICO DE LA TURBINA",
+      "CANTIDAD": 1,
+      "LOCALIZACION": 23,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 24,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 2,
+      "CODE_SUB_SYS": 11,
+      "ELEMENTO": "FILTRO DE RETORNO DE BAJA PRESION",
+      "CANTIDAD": 1,
+      "LOCALIZACION": 24,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 25,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 2,
+      "CODE_SUB_SYS": 11,
+      "ELEMENTO": "FILTRO DE RETORNO DE VALVULA DE ALIVIO Y DESAGUE DE CUBIERTA",
+      "CANTIDAD": 1,
+      "LOCALIZACION": 25,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 26,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 2,
+      "CODE_SUB_SYS": 12,
+      "ELEMENTO": "FILTRO PALL COMBUSTIBLE ",
+      "CANTIDAD": 1,
+      "LOCALIZACION": 26,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 27,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 2,
+      "CODE_SUB_SYS": 13,
+      "ELEMENTO": "FILTRO ACEITE PALL LUBRICACION GENERADOR MODULO A",
+      "CANTIDAD": 1,
+      "LOCALIZACION": 27,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 28,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 2,
+      "CODE_SUB_SYS": 13,
+      "ELEMENTO": "FILTRO ACEITE PALL LUBRICACION GENERADOR MODULO B",
+      "CANTIDAD": 1,
+      "LOCALIZACION": 28,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 29,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 2,
+      "CODE_SUB_SYS": 13,
+      "ELEMENTO": "FILTRO DE DESCARGA BOMBA JACKING",
+      "CANTIDAD": 4,
+      "LOCALIZACION": 29,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 30,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 2,
+      "CODE_SUB_SYS": 14,
+      "ELEMENTO": "FILTRO SCAVENGE MODULO A",
+      "CANTIDAD": 1,
+      "LOCALIZACION": 30,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 31,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 2,
+      "CODE_SUB_SYS": 14,
+      "ELEMENTO": "FILTRO SCAVENGE MODULO B",
+      "CANTIDAD": 1,
+      "LOCALIZACION": 31,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 32,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 2,
+      "CODE_SUB_SYS": 14,
+      "ELEMENTO": "FILTRO SUPPLY MODULO A",
+      "CANTIDAD": 1,
+      "LOCALIZACION": 32,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 33,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 2,
+      "CODE_SUB_SYS": 14,
+      "ELEMENTO": "FILTRO SUPPLY MODULO B",
+      "CANTIDAD": 1,
+      "LOCALIZACION": 33,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 34,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 2,
+      "CODE_SUB_SYS": 14,
+      "ELEMENTO": "FILTRO DE ACEITE DE TURBINA - GEOMETRIA VARIABLE",
+      "CANTIDAD": 1,
+      "LOCALIZACION": 34,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 35,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 2,
+      "CODE_SUB_SYS": 14,
+      "ELEMENTO": "FILTRO DOLLINGER ACEITE TURBINA",
+      "CANTIDAD": 2,
+      "LOCALIZACION": 35,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 36,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 2,
+      "CODE_SUB_SYS": 15,
+      "ELEMENTO": "FILTRO SPRINT",
+      "CANTIDAD": 1,
+      "LOCALIZACION": 36,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 37,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 3,
+      "CODE_SUB_SYS": 19,
+      "ELEMENTO": "FILTRO WACO BG1",
+      "CANTIDAD": 1,
+      "LOCALIZACION": 37,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 38,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 3,
+      "CODE_SUB_SYS": 19,
+      "ELEMENTO": "FILTRO WACO BG2",
+      "CANTIDAD": 1,
+      "LOCALIZACION": 38,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 39,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 3,
+      "CODE_SUB_SYS": 19,
+      "ELEMENTO": "FILTRO SHELCO BG1",
+      "CANTIDAD": 1,
+      "LOCALIZACION": 39,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 40,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 3,
+      "CODE_SUB_SYS": 19,
+      "ELEMENTO": "FILTRO SHELCO BG2",
+      "CANTIDAD": 1,
+      "LOCALIZACION": 40,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 41,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 4,
+      "CODE_SUB_SYS": 22,
+      "ELEMENTO": "ELEMENTOS FILTRANTES MODULO A",
+      "CANTIDAD": 11,
+      "LOCALIZACION": 41,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 42,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 4,
+      "CODE_SUB_SYS": 22,
+      "ELEMENTO": "ELEMENTOS FILTRANTES MODULO B",
+      "CANTIDAD": 11,
+      "LOCALIZACION": 42,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 43,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 4,
+      "CODE_SUB_SYS": 23,
+      "ELEMENTO": "ELEMENTOS FILTRANTES DE LAVADO QUIMICO",
+      "CANTIDAD": 7,
+      "LOCALIZACION": 43,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 44,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 4,
+      "CODE_SUB_SYS": 23,
+      "ELEMENTO": "FILTRO OSMOSIS 1",
+      "CANTIDAD": 9,
+      "LOCALIZACION": 44,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 45,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 4,
+      "CODE_SUB_SYS": 23,
+      "ELEMENTO": "FILTRO OSMOSIS 2",
+      "CANTIDAD": 9,
+      "LOCALIZACION": 45,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    },
+    {
+      "ID": 46,
+      "TAGNAME": "N/A",
+      "CODE_SYS": 4,
+      "CODE_SUB_SYS": 24,
+      "ELEMENTO": "FILTRO DE ACEITE DE MOTOR DIESEL",
+      "CANTIDAD": 1,
+      "LOCALIZACION": 46,
+      "MODELO": "SIN DATOS",
+      "MARCA": "SIN DATOS",
+      "ESPECIFICACIONES": "SIN DATOS"
+    }
+  ]
+}
